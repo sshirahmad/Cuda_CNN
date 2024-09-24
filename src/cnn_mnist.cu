@@ -1,44 +1,47 @@
-#include <../lib/cnn.h>
+#include <../lib/cnnlayer.h>
 
 #include <../lib/utils.h>
 
 #include <random>
 
-
-
-
-std::tuple<std::vector<unsigned char*>, int, int> read_images(const fs::path& directory) {
+std::tuple<std::vector<unsigned char*>, int, int, int, std::vector<std::string>> read_images(const fs::path& directory) {
     std::vector<unsigned char*> images;
+    std::vector<std::string> basenames;
     int width = 0;
     int height = 0;
+    int channels = 0;
 
     for (const auto& entry : fs::directory_iterator(directory)) {
+
         if (entry.is_regular_file() && entry.path().extension() == ".png") {
             // Read the image in grayscale
-            cv::Mat img = cv::imread(entry.path().string(), cv::IMREAD_GRAYSCALE);
+            cv::Mat img = cv::imread(entry.path().string(), cv::IMREAD_UNCHANGED);
+            std::string basename = entry.path().stem().string(); 
 
             if (!img.empty()) {
-
                 width = img.cols;
                 height = img.rows;
-                size_t img_size = width * height * sizeof(unsigned char);
-                unsigned char* d_image = AllocateHostMemory<unsigned char>(img_size, "pinned");
-                std::memcpy(d_image, img.data, img_size);
-                images.push_back(d_image);
+                channels = img.channels();
+                size_t img_size = width * height * channels * sizeof(unsigned char);
+                unsigned char* image = AllocateHostMemory<unsigned char>(img_size, "pinned");
+                std::memcpy(image, img.data, img_size);
+                images.push_back(image);
+                basenames.push_back(basename);
 
             } else {
                 std::cerr << "Failed to load image: " << entry.path() << std::endl;
             }
+        } else {
+            std::cerr << "Entry is not a regular file or not a PNG: " << entry.path() << std::endl;
         }
     }
 
-    return {images, width, height};
+    return {images, width, height, channels, basenames}; 
 }
 
-std::tuple<std::string, int, int, int> parseArguments(int argc, char* argv[]) {
+std::tuple<std::string, int, int> parseArguments(int argc, char* argv[]) {
     // Initialize default values
     std::string directory = "../data/train/mnist_images";
-    int index = 0;
     int dstWidth = 320;
     int dstHeight = 240;
 
@@ -50,15 +53,8 @@ std::tuple<std::string, int, int, int> parseArguments(int argc, char* argv[]) {
         if (arg == "-d" && i + 1 < argc) {
             directory = argv[++i];
         }
-        // Check for the index flag
-        else if (arg == "-i" && i + 1 < argc) {
-            try {
-                index = std::stoi(argv[++i]);
-            } catch (const std::invalid_argument& e) {
-                std::cerr << "Invalid index value provided. Using default value 0." << std::endl;
-            }
-        }
-        // Check for the index flag
+
+        // Check for the width flag
         else if (arg == "-w" && i + 1 < argc) {
             try {
                 dstWidth = std::stoi(argv[++i]);
@@ -66,7 +62,7 @@ std::tuple<std::string, int, int, int> parseArguments(int argc, char* argv[]) {
                 std::cerr << "Invalid width value provided. Using default value 320." << std::endl;
             }
         }
-        // Check for the index flag
+        // Check for the height flag
         else if (arg == "-h" && i + 1 < argc) {
             try {
                 dstHeight = std::stoi(argv[++i]);
@@ -77,12 +73,11 @@ std::tuple<std::string, int, int, int> parseArguments(int argc, char* argv[]) {
     }
 
     std::cout << "Data Path: " << directory << std::endl;
-    std::cout << "Image Index: " << index << std::endl;
     std::cout << "Width: " << dstWidth << std::endl;
     std::cout << "Height: " << dstHeight << std::endl;
 
 
-    return {directory, index, dstWidth, dstHeight};
+    return {directory, dstWidth, dstHeight};
 }
 
 
@@ -105,10 +100,10 @@ __host__ void convertToUnsignedChar(const float* input, unsigned char* output, i
 }
 
 
-__host__ void save_image(int outputWidth, int outputHeight, const float* convImage, int index){
+__host__ void save_image(int outputWidth, int outputHeight, const float* convImage, int numChannels, std::string filename){
 
     // Calculate size of image
-    int output_size = outputWidth * outputHeight;
+    int output_size = outputWidth * outputHeight * numChannels;
     size_t conv_size = output_size * sizeof(float);
 
     // Allocate dynamic memory to host image with flot and unsigned char types
@@ -130,10 +125,10 @@ __host__ void save_image(int outputWidth, int outputHeight, const float* convIma
     convertToUnsignedChar(h_conv_image, output, output_size);
 
     // Create an OpenCV matrix for host image to use OpenCV functions
-    cv::Mat convMat(outputWidth, outputHeight, CV_8UC1, output);
+    cv::Mat convMat(outputHeight, outputHeight, CV_MAKETYPE(CV_8U, numChannels), output);
 
     // Save the image
-    std::string outputFileName = "./output/output_" + std::to_string(index) + ".png";
+    std::string outputFileName = "./output/output_" + filename + ".png";
     cv::imwrite(outputFileName, convMat);
 
     delete[] h_conv_image;
@@ -144,23 +139,25 @@ __host__ void save_image(int outputWidth, int outputHeight, const float* convIma
 
 int main(int argc, char* argv[]) {
 
-    auto[directory, index, dstWidth, dstHeight] = parseArguments(argc, argv);
+    auto[directory, dstWidth, dstHeight] = parseArguments(argc, argv);
     
-    /// Read images
-    auto[h_images, srcWidth, srcHeight] = read_images(directory);
+    // Read images
+    auto[h_images, srcWidth, srcHeight, numChannels, filenames] = read_images(directory);
 
     // Initialize convolution paramters
-    int filterHeight = 3, filterWidth = 3;
-    int strideHeight = 1, strideWidth = 1;
-    int paddingHeight = 1, paddingWidth = 1;
-    int numFilters = 32;
+    int filterHeight = 5, filterWidth = 5; 
+    int strideHeight = 2, strideWidth = 2;
+    int paddingHeight = 2, paddingWidth = 2;
+    int numFilters = 1;
 
     // Construct the network
-    CNN SimpleCNN(srcHeight, srcWidth, dstHeight, dstWidth, filterHeight, filterWidth,
-                    strideHeight, strideWidth, paddingHeight, paddingWidth, numFilters);
+    CNNLayer SimpleCNN(srcHeight, srcWidth, dstHeight, dstWidth, filterHeight, filterWidth,
+                        strideHeight, strideWidth, paddingHeight, paddingWidth, numFilters, numChannels);
 
-    int i = 0;
-    for (const auto& img : h_images) {     
+    for (size_t i = 0; i < h_images.size(); ++i) {
+        const auto& img = h_images[i];
+        const auto& filename = filenames[i]; 
+
 
         SimpleCNN.ForwardPass(img);
 
@@ -168,8 +165,7 @@ int main(int argc, char* argv[]) {
         auto[poolWidth, poolHeight, outputimage] = SimpleCNN.GetOutput();
 
         // Save the result (optionally save with a different name for each image)
-        save_image(poolWidth, poolHeight, outputimage, i);
-        i++;
+        save_image(poolWidth, poolHeight, outputimage, 1, filename);
 
     }
 
