@@ -1,8 +1,8 @@
 # Define directories
-SRC_DIR = ./src
+SRC_DIR = ./advanced/src
 BIN_DIR = ./bin
 DATA_DIR = ./data
-LIB_DIR = ./lib
+LIB_DIR = ./advanced/lib
 
 
 # Define the compiler and flags
@@ -15,13 +15,16 @@ CXXFLAGS = -std=c++17 \
            -I"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5/include" \
            -I"C:/opencv/build/include" \
            -I"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5/Common" \
+		   -I"C:/Program Files/NVIDIA/CUDNN/v9.4/include/12.6" \
            -I"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5/Common/UtilNPP" \
            -I"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5/FreeImage/Dist/x64" \
 		   -I"$(LIB_DIR)" \
            -ccbin "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.41.34120/bin/Hostx64/x64"
 
 LDFLAGS = -L"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5/lib/x64" \
-          -lcudart -lnppc -lnppif -lnppig -lnppist -lnppisu \
+          -lcudart -lnppc -lnppial -lnppif -lnppig -lnppist -lnppisu \
+		  -L"C:/Program Files/NVIDIA/CUDNN/v9.4/lib/12.6/x64" \
+          -lcudnn \
           -L"C:/opencv/build/x64/vc16/lib" \
           -lopencv_world4100 -lopencv_world4100d \
           -L"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5/FreeImage/Dist/x64" \
@@ -30,7 +33,7 @@ LDFLAGS = -L"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5/lib/x64" \
 
 
 # Define source files and target executable
-SRC = $(SRC_DIR)/cnn_mnist.cu $(SRC_DIR)/cnn_kernels/convolution.cu $(SRC_DIR)/cnn_kernels/activation.cu $(SRC_DIR)/cnn_kernels/pooling.cu $(SRC_DIR)/models/cnnlayer.cu 
+SRC = $(SRC_DIR)/cnn_mnist.cu $(SRC_DIR)/layers/cnnlayer.cu $(SRC_DIR)/layers/kernel_init.cu $(SRC_DIR)/data_utils/augmentations.cu 
 
 TARGET = $(BIN_DIR)/cnn_mnist.exe
 
