@@ -29,6 +29,7 @@ CNNLayer::~CNNLayer() {
 // Allocate memory for GPU data
 void CNNLayer::CreateandSetDescs() {
 
+    ///////////////////////////// FORWARD PASS /////////////////////////////   
 
     // Input tensor descriptor
     CHECK_CUDNN(cudnnCreateTensorDescriptor(&inputDesc));
@@ -56,9 +57,9 @@ void CNNLayer::CreateandSetDescs() {
     CHECK_CUDNN(cudnnGetConvolution2dForwardOutputDim(convDesc, inputDesc, filterDesc,
                                                       &batchSize, &outputChannels, &convHeight, &convWidth));
 
-    // Output tensor descriptor
-    CHECK_CUDNN(cudnnCreateTensorDescriptor(&outputDesc));
-    CHECK_CUDNN(cudnnSetTensor4dDescriptor(outputDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+    // Output convolution tensor descriptor
+    CHECK_CUDNN(cudnnCreateTensorDescriptor(&outputconvDesc));
+    CHECK_CUDNN(cudnnSetTensor4dDescriptor(outputconvDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
                                            batchSize, outputChannels, convHeight, convWidth));
 
     
@@ -80,13 +81,20 @@ void CNNLayer::CreateandSetDescs() {
 
 
     // Pooling tensor dimensions
-    // poolHeight = (convHeight + 2 * paddingHeight - filterHeight) / strideHeight + 1;
-    // poolWidth = (convWidth + 2 * paddingWidth - filterWidth) / strideWidth + 1;
-    CHECK_CUDNN(cudnnGetPooling2dForwardOutputDim(poolDesc, outputDesc,
+    CHECK_CUDNN(cudnnGetPooling2dForwardOutputDim(poolDesc, outputconvDesc,
                                                       &batchSize, &outputChannels, &poolHeight, &poolWidth));
+
+    // Output pooling tensor descriptor
+    CHECK_CUDNN(cudnnCreateTensorDescriptor(&outputpoolDesc));
+    CHECK_CUDNN(cudnnSetTensor4dDescriptor(outputpoolDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+                                           batchSize, outputChannels, poolHeight, poolWidth));
 
     // Allocate memory for pooling tensor
     cudaMalloc(&devicePool, batchSize * outputChannels * poolHeight * poolWidth * sizeof(float));
+
+
+    ///////////////////////////// BACKWARD PASS /////////////////////////////   
+
 
 
 }
@@ -96,7 +104,8 @@ void CNNLayer::FreeMemory() {
 
     // Clean up descriptors
     cudnnDestroyTensorDescriptor(inputDesc);
-    cudnnDestroyTensorDescriptor(outputDesc);
+    cudnnDestroyTensorDescriptor(outputconvDesc);
+    cudnnDestroyTensorDescriptor(outputpoolDesc);
     cudnnDestroyFilterDescriptor(filterDesc);
     cudnnDestroyConvolutionDescriptor(convDesc);
     cudnnDestroyActivationDescriptor(activationDesc);
@@ -153,7 +162,7 @@ void CNNLayer::LaunchConvolutionKernel() {
     // Perform convolution
     CHECK_CUDNN(cudnnConvolutionForward(cudnn, &alpha, inputDesc, deviceInput, filterDesc, deviceFilter,
                                         convDesc, CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, nullptr, 0, 
-                                        &beta, outputDesc, deviceConv));
+                                        &beta, outputconvDesc, deviceConv));
 
     cudaDeviceSynchronize();
 
@@ -162,8 +171,8 @@ void CNNLayer::LaunchConvolutionKernel() {
 void CNNLayer::LaunchActivationKernel() {
 
     // Apply ReLU activation function
-    CHECK_CUDNN(cudnnActivationForward(cudnn, activationDesc, &alpha, outputDesc, deviceConv,
-                                       &beta, outputDesc, deviceConv));
+    CHECK_CUDNN(cudnnActivationForward(cudnn, activationDesc, &alpha, outputconvDesc, deviceConv,
+                                       &beta, outputconvDesc, deviceConv));
 
     cudaDeviceSynchronize();
 
@@ -172,12 +181,42 @@ void CNNLayer::LaunchActivationKernel() {
 void CNNLayer::LaunchMaxPoolingKernel() {
 
     // Perform max pooling
-    CHECK_CUDNN(cudnnPoolingForward(cudnn, poolDesc, &alpha, outputDesc, deviceConv,
-                                    &beta, outputDesc, devicePool));
+    CHECK_CUDNN(cudnnPoolingForward(cudnn, poolDesc, &alpha, outputconvDesc, deviceConv,
+                                    &beta, outputpoolDesc, devicePool));
 
     cudaDeviceSynchronize();
 
 }
+
+// // Backward Activation Kernel
+// void CNNLayer::LaunchBackwardActivationKernel() {
+//     CHECK_CUDNN(cudnnActivationBackward(cudnn, activationDesc, &alpha, outputDesc, deviceConv,
+//                                         outputDesc, deviceConv, &beta, inputDesc, deviceInput));
+//     cudaDeviceSynchronize();
+// }
+
+// // Backward Convolution Kernel
+// void CNNLayer::LaunchBackwardConvolutionKernel(float* outputGrad) {
+//     // Assuming outputGrad is the gradient from the next layer
+//     CHECK_CUDNN(cudnnConvolutionBackwardData(cudnn, &alpha, filterDesc, deviceFilter,
+//                                              outputDesc, outputGrad, convDesc,
+//                                              CUDNN_CONVOLUTION_BWD_DATA_ALGO_0,
+//                                              nullptr, 0, &beta, inputDesc, deviceGradInput));
+
+//     CHECK_CUDNN(cudnnConvolutionBackwardFilter(cudnn, &alpha, inputDesc, deviceInput,
+//                                                outputDesc, outputGrad, convDesc,
+//                                                CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0,
+//                                                nullptr, 0, &beta, filterDesc, deviceGradFilter));
+
+//     cudaDeviceSynchronize();
+// }
+
+// // Backward Max Pooling Kernel
+// void CNNLayer::LaunchBackwardMaxPoolingKernel(float* outputGrad) {
+//     CHECK_CUDNN(cudnnPoolingBackward(cudnn, poolDesc, &alpha, outputDesc, devicePool,
+//                                      outputDesc, outputGrad, &beta, inputDesc, deviceGradInput));
+//     cudaDeviceSynchronize();
+// }
 
 // Initialize filters 
 void CNNLayer::SetFilters() {
@@ -189,10 +228,10 @@ void CNNLayer::SetFilters() {
 // Get output from device to host
 std::tuple<int, int, float*> CNNLayer::GetOutput(int index) {
 
-    // float* output = devicePool + index * poolWidth * poolHeight * outputChannels + 0 * poolHeight * poolWidth;
-    float* output = deviceConv + index * outputChannels * convHeight * convWidth + 0 * convHeight * convWidth;
+    float* output = devicePool + index * poolWidth * poolHeight * outputChannels + 0 * poolHeight * poolWidth;
+    // float* output = deviceConv + index * outputChannels * convHeight * convWidth + 0 * convHeight * convWidth;
 
-    // return {poolWidth, poolHeight, output};
-    return {convWidth, convHeight, output};
+    return {poolWidth, poolHeight, output};
+    // return {convWidth, convHeight, output};
 
 }

@@ -157,7 +157,7 @@ int main(int argc, char* argv[]) {
 
     // Initialize convolution paramters
     int filterHeight = 5, filterWidth = 5; 
-    int strideHeight = 1, strideWidth = 1;
+    int strideHeight = 2, strideWidth = 2;
     int paddingHeight = 1, paddingWidth = 1;
     int numFilters = 1;
     int batchSize = 2;

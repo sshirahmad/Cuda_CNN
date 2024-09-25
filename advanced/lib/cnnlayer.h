@@ -48,7 +48,7 @@ private:
     cudnnHandle_t cudnn;
 
     // Create tensor descriptors for input, output, and filters
-    cudnnTensorDescriptor_t inputDesc, outputDesc;
+    cudnnTensorDescriptor_t inputDesc, outputconvDesc, outputpoolDesc;
     cudnnPoolingDescriptor_t poolDesc;
     cudnnFilterDescriptor_t filterDesc;
     cudnnConvolutionDescriptor_t convDesc;
