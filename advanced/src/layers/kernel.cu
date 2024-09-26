@@ -1,4 +1,4 @@
-#include "../lib/kernel_init.h"
+#include "../lib/kernel.h"
 
 
 __global__ void initializeWeights(float* weights, int size, unsigned long long seed, float min, float max) {

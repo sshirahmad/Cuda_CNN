@@ -30,7 +30,9 @@ public:
     ~CNNLayer();
 
     // Forward pass
-    void ForwardPass(float* hostInput);
+    float* ForwardPass(const float* deviceInput);
+
+    float* BackwardPass(const float* deviceOutputGrad);
 
     // Setters and Getters for parameters
     std::tuple<int, int, float*> GetOutput(int index);
@@ -54,10 +56,17 @@ private:
     cudnnConvolutionDescriptor_t convDesc;
     cudnnActivationDescriptor_t activationDesc;
 
+    const float* deviceInput;
     float* deviceConv;
-    float* devicePool;
-    float* deviceInput;
+    float* deviceAct;
+    float* deviceOutput;
     float* deviceFilter;
+
+    float* deviceActGrad;
+    float* deviceConvGrad;
+    float* deviceInputGrad;
+    float* deviceFilterGrad;
+    const float* deviceOutputGrad;
 
     void CreateandSetDescs();
     void FreeMemory();
@@ -65,6 +74,11 @@ private:
     void LaunchConvolutionKernel();
     void LaunchActivationKernel();
     void LaunchMaxPoolingKernel();
+    void LaunchBackwardMaxPoolingKernel();
+    void LaunchBackwardActivationKernel();
+    void LaunchBackwardConvolutionKernel();
+    void UpdateWeights(float learningRate);
+
 };
 
 #endif // CNNLayer_H

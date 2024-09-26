@@ -1,4 +1,5 @@
 #include <../lib/cnnlayer.h>
+#include <../lib/cnn.h>
 #include <../lib/augmentations.h>
 #include <../lib/utils.h>
 #include <random>
@@ -156,22 +157,28 @@ int main(int argc, char* argv[]) {
     auto[h_images, srcWidth, srcHeight, numChannels, filenames] = read_images(directory);
 
     // Initialize convolution paramters
-    int filterHeight = 5, filterWidth = 5; 
-    int strideHeight = 2, strideWidth = 2;
+    int filterHeight = 3, filterWidth = 3; 
+    int strideHeight = 1, strideWidth = 1;
     int paddingHeight = 1, paddingWidth = 1;
-    int numFilters = 1;
+    int numFilters = 5;
     int batchSize = 2;
 
     // Construct the augmentor
     ImageAugmentation Augmentor(srcWidth, srcHeight, dstWidth, dstHeight, numChannels);
 
     // Construct the network
-    CNNLayer SimpleCNN(cudnn, dstHeight, dstWidth, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, numFilters, numChannels, batchSize);
+    CNN CNNModel(cudnn, dstHeight, dstWidth, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, numFilters, numChannels, batchSize);
 
+    // Vectors for batches
     int imageSize = numChannels * dstHeight * dstWidth;
     std::vector<float*> batch_images;
     std::vector<float> hostInput(batchSize * imageSize);
     std::vector<std::string> batch_filenames;
+
+    // Allocate memory for output grad tensor
+    // float* deviceOutputGrad;
+    // cudaMalloc(&deviceOutputGrad, batchSize * imageSize * sizeof(float));
+
     for (size_t i = 0; i < h_images.size(); ++i) {
         const auto& img = h_images[i];
         const auto& filename = filenames[i]; 
@@ -191,12 +198,15 @@ int main(int argc, char* argv[]) {
             }
 
             // Pass the batch to the network
-            SimpleCNN.ForwardPass(hostInput.data()); 
+            CNNModel.ForwardPass(hostInput.data()); 
+
+            // float deviceOutput = SimpleCNN.BackwardPass(deviceInput); 
+
 
             // Get the output for each image in the batch
             for (size_t j = 0; j < batch_images.size(); ++j) {
-                auto[poolWidth, poolHeight, outputimage] = SimpleCNN.GetOutput(j);  
-                save_image(poolWidth, poolHeight, outputimage, 1, batch_filenames[j]);
+                auto[outputWidth, outputHeight, outputimage] = CNNModel.GetOutput(j);  
+                save_image(outputWidth, outputHeight, outputimage, 1, batch_filenames[j]);
             }
 
             // Clear the batch

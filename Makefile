@@ -33,7 +33,7 @@ LDFLAGS = -L"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5/lib/x64" \
 
 
 # Define source files and target executable
-SRC = $(SRC_DIR)/cnn_mnist.cu $(SRC_DIR)/layers/cnnlayer.cu $(SRC_DIR)/layers/kernel_init.cu $(SRC_DIR)/data_utils/augmentations.cu 
+SRC = $(SRC_DIR)/cnn_mnist.cu $(SRC_DIR)/layers/cnnlayer.cu $(SRC_DIR)/layers/kernel.cu $(SRC_DIR)/data_utils/augmentations.cu $(SRC_DIR)/models/cnn.cu 
 
 TARGET = $(BIN_DIR)/cnn_mnist.exe
 
