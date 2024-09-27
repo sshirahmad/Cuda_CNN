@@ -47,6 +47,34 @@ std::tuple<std::vector<float*>, int, int, int, std::vector<std::string>> read_im
 }
 
 
+
+std::vector<int> readLabelsFromCSV(const std::string& fileName) {
+    std::vector<int> labels;
+    std::ifstream file(fileName);
+
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open the file " << fileName << std::endl;
+        return labels;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        std::stringstream ss(line);
+        std::string value;
+        while (std::getline(ss, value, ',')) {
+            try {
+                labels.push_back(std::stoi(value));  // Convert the string to an integer label
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid label: " << value << std::endl;
+            }
+        }
+    }
+
+    file.close();
+    return labels;
+}
+
+
 std::tuple<std::string, int, int> parseArguments(int argc, char* argv[]) {
     // Initialize default values
     std::string directory = "../data/train/mnist_images";
@@ -145,81 +173,147 @@ __host__ void save_image(int outputWidth, int outputHeight, const float* convIma
 }
 
 
+// Function to print a progress bar
+void printProgressBar(int current, int total, int barWidth = 50) {
+    float progress = (float)current / total;
+    int pos = barWidth * progress;
+
+    std::cout << "[";
+    for (int i = 0; i < barWidth; ++i) {
+        if (i < pos) std::cout << "=";
+        else if (i == pos) std::cout << ">";
+        else std::cout << " ";
+    }
+    std::cout << "] " << int(progress * 100.0) << " %\r";
+    std::cout.flush();  // Ensure the progress bar is updated in real-time
+}
+
+
 int main(int argc, char* argv[]) {
 
-    // Initialize CUDA and cuDNN
+    // Initialize CUDA and cuDNN and cuBLAS
     cudnnHandle_t cudnn;
+    cublasHandle_t cublas;
+
     cudnnCreate(&cudnn);
+    cublasCreate(&cublas);
 
     auto[directory, dstWidth, dstHeight] = parseArguments(argc, argv);
     
-    // Read images
-    auto[h_images, srcWidth, srcHeight, numChannels, filenames] = read_images(directory);
+    // Read images and labels
+    std::string image_directory = directory + "mnist_images";
+    std::string label_directory =  directory + "mnist_labels.csv";
+    auto[h_images, srcWidth, srcHeight, numChannels, filenames] = read_images(image_directory);
+    auto labels = readLabelsFromCSV(label_directory);
 
     // Initialize convolution paramters
     int filterHeight = 3, filterWidth = 3; 
     int strideHeight = 1, strideWidth = 1;
     int paddingHeight = 1, paddingWidth = 1;
-    int numFilters = 5;
-    int batchSize = 2;
+    int numFilters = 32;
+    int hiddenDim = 32, numClass = 10;
+    int batchSize = 128;
+    float learningrate = 0.0001;
+    bool debug = false;
+    int epochs = 100;
 
     // Construct the augmentor
     ImageAugmentation Augmentor(srcWidth, srcHeight, dstWidth, dstHeight, numChannels);
 
     // Construct the network
-    CNN CNNModel(cudnn, dstHeight, dstWidth, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, numFilters, numChannels, batchSize);
+    CNN CNNModel(cudnn, cublas, srcHeight, srcWidth, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, numFilters, numChannels, hiddenDim, numClass, batchSize, learningrate);
 
     // Vectors for batches
     int imageSize = numChannels * dstHeight * dstWidth;
+    std::vector<float> lossPerEpoch(epochs);
+
     std::vector<float*> batch_images;
     std::vector<float> hostInput(batchSize * imageSize);
+    std::vector<int> hostLabel;
     std::vector<std::string> batch_filenames;
 
-    // Allocate memory for output grad tensor
-    // float* deviceOutputGrad;
-    // cudaMalloc(&deviceOutputGrad, batchSize * imageSize * sizeof(float));
+    for (size_t e = 0; e < epochs; ++e) {
 
-    for (size_t i = 0; i < h_images.size(); ++i) {
-        const auto& img = h_images[i];
-        const auto& filename = filenames[i]; 
+        float epochLoss = 0.0f;
 
-        float* output = Augmentor.augment(img);
+        std::cout << "Epoch " << e + 1 << "/" << epochs << std::endl;
 
-        batch_images.push_back(output);
-        batch_filenames.push_back(filename);
+        for (size_t i = 0; i < h_images.size(); ++i) {
 
-        // When the batch is full, process it
-        if (batch_images.size() == batchSize) {
+            const auto& img = h_images[i];
+            const auto& filename = filenames[i]; 
+            const auto& label = labels[i]; 
 
-            // Fill the contiguous vector with image data
-            for (size_t i = 0; i < batchSize; ++i) {
-                // Copy data from each individual image to the contiguous vector
-                std::copy(batch_images[i], batch_images[i] + imageSize, hostInput.begin() + i * imageSize);
+            // Pre-process images
+            float* output = Augmentor.augment(img);
+
+            batch_images.push_back(output);
+            batch_filenames.push_back(filename);
+            hostLabel.push_back(label);
+
+            // When the batch is full, process it
+            if (batch_images.size() == batchSize) {
+
+                // Fill the contiguous vector with image data
+                for (size_t i = 0; i < batchSize; ++i) {
+                    // Copy data from each individual image to the contiguous vector
+                    std::copy(batch_images[i], batch_images[i] + imageSize, hostInput.begin() + i * imageSize);
+                }
+
+                // Pass the batch to the network
+                auto logits = CNNModel.ForwardPass(hostInput.data(), hostLabel.data()); 
+                auto deviceLoss = CNNModel.ComputeLoss(); 
+                CNNModel.BackwardPass(); 
+
+                // Copy batch loss from device to host
+                float batchLoss = 0.0f;
+                cudaMemcpy(&batchLoss, deviceLoss, sizeof(float), cudaMemcpyDeviceToHost);
+
+                epochLoss += batchLoss;
+
+                // Update the progress bar
+                printProgressBar(i + 1, h_images.size());
+
+                // Print logits for each class in each batch (debug mode)
+                if (debug) {
+
+                    std::vector<float> hostLogits(batchSize * numClass);
+                    cudaMemcpy(hostLogits.data(), logits, batchSize * numClass * sizeof(float), cudaMemcpyDeviceToHost);
+
+                    for (size_t i = 0; i < batchSize; ++i) {
+                        std::cout << "Batch " << i << " logits: ";
+                        for (size_t k = 0; k < numClass; ++k) {
+                            std::cout << hostLogits[i * numClass + k] << " "; 
+                        }
+                        std::cout << std::endl; 
+                    }
+
+                    // Save output images
+                    for (size_t j = 0; j < batch_images.size(); ++j) {
+                        auto [outputWidth, outputHeight, outputImage] = CNNModel.GetOutput(j);  
+                        save_image(outputWidth, outputHeight, outputImage, 1, batch_filenames[j]);
+                    }
+                }
+
+                // Clear the batch
+                batch_images.clear();
+                hostInput.assign(batchSize * imageSize, 0.0f);  // Maintain size of hostInput
+                hostLabel.clear();
+                batch_filenames.clear();
             }
-
-            // Pass the batch to the network
-            CNNModel.ForwardPass(hostInput.data()); 
-
-            // float deviceOutput = SimpleCNN.BackwardPass(deviceInput); 
-
-
-            // Get the output for each image in the batch
-            for (size_t j = 0; j < batch_images.size(); ++j) {
-                auto[outputWidth, outputHeight, outputimage] = CNNModel.GetOutput(j);  
-                save_image(outputWidth, outputHeight, outputimage, 1, batch_filenames[j]);
-            }
-
-            // Clear the batch
-            batch_images.clear();
-            hostInput.clear();
-            batch_filenames.clear();
-        
         }
 
+        // Average the loss over the batches
+        lossPerEpoch[e] = epochLoss / (h_images.size() / batchSize);
+
+        // Display final loss after the epoch
+        std::cout << std::endl << "Epoch " << e + 1 << " completed. Loss: " << lossPerEpoch[e] << std::endl << std::endl;
     }
+
 
     // Cleanup
     cudnnDestroy(cudnn);
+    cublasDestroy(cublas);
 
     return 0;
 }

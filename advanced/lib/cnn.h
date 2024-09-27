@@ -8,6 +8,9 @@
 #include <nppi.h>
 #include <cudnn.h>
 #include <cnnlayer.h>
+#include <fclayer.h>
+#include <kernel.h>
+#include <loss.h>
 
 // Error checking macro for cuDNN calls
 #define CHECK_CUDNN(call) \
@@ -16,25 +19,37 @@
         exit(EXIT_FAILURE); \
     }
 
+#define CHECK_CUDA(call)                                                       \
+    {                                                                          \
+        cudaError_t err = call;                                              \
+        if (err != cudaSuccess) {                                           \
+            std::cerr << "CUDA error: " << cudaGetErrorString(err) << " in " \
+                      << __FILE__ << " at line " << __LINE__ << std::endl; \
+            exit(EXIT_FAILURE);                                             \
+        }                                                                      \
+    }
+
 class CNN {
 public:
     // Constructor
-    CNN(cudnnHandle_t cudnn, int inputHeight, int inputWidth,
+    CNN(cudnnHandle_t cudnn, cublasHandle_t cublas,
+            int inputHeight, int inputWidth,
             int filterHeight, int filterWidth,
             int strideHeight, int strideWidth,
             int paddingHeight, int paddingWidth,
-            int outputChannels, int inputChannels,
-            int batchSize);
+            int numFilter, int inputChannels,
+            int hiddenDim, int numClass,
+            int batchSize, float learningrate);
 
     // Destructor
     ~CNN();
 
     // Forward pass
-    float* ForwardPass(const float* hostInput);
+    float* ForwardPass(const float* hostInput, const int* hostLabels);
 
-    float ComputeLoss(float* predictedOutput, float* trueLabels, int batchSize, int numClasses);
+    float* ComputeLoss();
 
-    float* BackwardPass(const float* deviceOutputGrad);
+    void BackwardPass();
 
     // Setters and Getters for parameters
     std::tuple<int, int, float*> GetOutput(int index);
@@ -44,21 +59,32 @@ private:
     int filterHeight, filterWidth;
     int strideHeight, strideWidth;
     int paddingHeight, paddingWidth;
-    int outputChannels, inputChannels;
+    int numFilter, inputChannels;
+    int hiddenDim, numClass;
     int poolWidth, poolHeight;
     int convHeight, convWidth;
     int batchSize;
-    int outputHeight, outputWidth;
+    int outputHeight, outputWidth, outputChannels;
     cudnnHandle_t cudnn;
+    cublasHandle_t cublas;
+    float learningrate;
+    int flattenedSize;
 
     // CNN Layers
     CNNLayer* Layer1 = nullptr;
     CNNLayer* Layer2 = nullptr;
     CNNLayer* Layer3 = nullptr;
+    FCLayer* Layer4 = nullptr;
+    FCLayer* Layer5 = nullptr;
 
     float* deviceInput;
     float* deviceLoss;
-    float* modelOutput;
+    int* deviceLabels;
+
+    float* cnnOutput;
+    float* flattenedOutput;
+    float* fcLogits;
+    float* deviceOutputGrad;
 
     void AllocateMemory();
     void FreeMemory();

@@ -17,3 +17,18 @@ __global__ void initializeWeights(float* weights, int size, unsigned long long s
         weights[idx] = randValue;
     }
 }
+
+
+
+__global__ void flatten_NCHW(float* input, float* output, int batchSize, int channels, int height, int width) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int sizePerImage = channels * height * width;
+
+    if (idx < batchSize * sizePerImage) {
+        int batchIdx = idx / sizePerImage;
+        int innerIdx = idx % sizePerImage;
+
+        // Flatten: output stores each image as a row
+        output[batchIdx * sizePerImage + innerIdx] = input[idx];
+    }
+}

@@ -22,7 +22,7 @@ CXXFLAGS = -std=c++17 \
            -ccbin "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.41.34120/bin/Hostx64/x64"
 
 LDFLAGS = -L"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5/lib/x64" \
-          -lcudart -lnppc -lnppial -lnppif -lnppig -lnppist -lnppisu \
+          -lcudart -lcublas -lnppc -lnppial -lnppif -lnppig -lnppist -lnppisu \
 		  -L"C:/Program Files/NVIDIA/CUDNN/v9.4/lib/12.6/x64" \
           -lcudnn \
           -L"C:/opencv/build/x64/vc16/lib" \
@@ -33,7 +33,7 @@ LDFLAGS = -L"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5/lib/x64" \
 
 
 # Define source files and target executable
-SRC = $(SRC_DIR)/cnn_mnist.cu $(SRC_DIR)/layers/cnnlayer.cu $(SRC_DIR)/layers/kernel.cu $(SRC_DIR)/data_utils/augmentations.cu $(SRC_DIR)/models/cnn.cu 
+SRC = $(SRC_DIR)/cnn_mnist.cu $(SRC_DIR)/layers/cnnlayer.cu $(SRC_DIR)/layers/fclayer.cu $(SRC_DIR)/layers/kernel.cu $(SRC_DIR)/data_utils/augmentations.cu $(SRC_DIR)/models/cnn.cu $(SRC_DIR)/models/loss.cu 
 
 TARGET = $(BIN_DIR)/cnn_mnist.exe
 
@@ -47,7 +47,7 @@ $(TARGET): $(SRC)
 
 # Rule for running the application
 run: $(TARGET)
-	$(TARGET) -d "./data" -w 500 -h 500
+	$(TARGET) -d "../data/train/" -w 100 -h 100
 
 # Clean up
 clean:

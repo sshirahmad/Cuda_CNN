@@ -42,15 +42,10 @@ void ImageAugmentation::FreeMemory(){
 void ImageAugmentation::reset() {
     // Free previously allocated host memory
     delete[] h_nppOutput;
-    // delete[] h_chwImage; // will lead to undefined behavior
 
     // Reset pointers to new memory
     h_nppOutput = new float[newWidth * newHeight * numChannels];
     h_chwImage = new float[newWidth * newHeight * numChannels];
-
-    // Reset the allocated device memory
-    cudaMemset(deviceInput, 0, srcWidth * srcHeight * numChannels * sizeof(float));
-    cudaMemset(deviceOutput, 0, newWidth * newHeight * numChannels * sizeof(float));
 
 }
 
@@ -60,7 +55,7 @@ float* ImageAugmentation::augment(float* h_image){
 
     cudaMemcpy(deviceInput, h_image, srcWidth * srcHeight * numChannels * sizeof(float), cudaMemcpyHostToDevice);
 
-    resize();
+    // resize();
     normalize();
 
     // Copy NPP output from device to host (temporary storage)

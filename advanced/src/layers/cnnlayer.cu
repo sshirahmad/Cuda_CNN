@@ -6,7 +6,7 @@ CNNLayer::CNNLayer(cudnnHandle_t cudnn, int inputHeight, int inputWidth,
                     int strideHeight, int strideWidth,
                     int paddingHeight, int paddingWidth,
                     int outputChannels, int inputChannels,
-                    int batchSize)
+                    int batchSize, float learningrate)
                 :
     cudnn(cudnn),  
     inputHeight(inputHeight), inputWidth(inputWidth),
@@ -14,7 +14,7 @@ CNNLayer::CNNLayer(cudnnHandle_t cudnn, int inputHeight, int inputWidth,
     strideHeight(strideHeight), strideWidth(strideWidth),
     paddingHeight(paddingHeight), paddingWidth(paddingWidth),
     outputChannels(outputChannels), inputChannels(inputChannels),
-    batchSize(batchSize) {
+    batchSize(batchSize), learningrate(learningrate) {
     
     // Initialize and set tensor and convolution descriptors
     CreateandSetDescs();
@@ -44,8 +44,13 @@ void CNNLayer::CreateandSetDescs() {
     CHECK_CUDNN(cudnnSetFilter4dDescriptor(filterDesc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
                                            outputChannels, inputChannels, filterHeight, filterWidth));
 
+    // Filter tensor (weights) descriptor (for cudnnAddTensor)
+    CHECK_CUDNN(cudnnCreateTensorDescriptor(&filterTensorDesc));
+    CHECK_CUDNN(cudnnSetTensor4dDescriptor(filterTensorDesc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT,
+                                           outputChannels, inputChannels, filterHeight, filterWidth));
+
     // Allocate memory for filter tensor
-    cudaMalloc(&deviceFilter, outputChannels * inputChannels * filterHeight * filterWidth * sizeof(float));
+    CHECK_CUDA(cudaMalloc(&deviceFilter, outputChannels * inputChannels * filterHeight * filterWidth * sizeof(float)));
 
     // Convolution descriptor
     CHECK_CUDNN(cudnnCreateConvolutionDescriptor(&convDesc));
@@ -63,7 +68,7 @@ void CNNLayer::CreateandSetDescs() {
 
     
     // Allocate memory for convolution tensor
-    cudaMalloc(&deviceConv, batchSize * outputChannels * convHeight * convWidth * sizeof(float));
+    CHECK_CUDA(cudaMalloc(&deviceConv, batchSize * outputChannels * convHeight * convWidth * sizeof(float)));
 
     ///////////////////////////// ACTIVATION TENSORS AND DESCRIPTORS /////////////////////////////   
 
@@ -72,7 +77,7 @@ void CNNLayer::CreateandSetDescs() {
     CHECK_CUDNN(cudnnSetActivationDescriptor(activationDesc, CUDNN_ACTIVATION_RELU, CUDNN_NOT_PROPAGATE_NAN, 0.0));
 
     // Allocate memory for activation tensor
-    cudaMalloc(&deviceAct, batchSize * outputChannels * convHeight * convWidth * sizeof(float));
+    CHECK_CUDA(cudaMalloc(&deviceAct, batchSize * outputChannels * convHeight * convWidth * sizeof(float)));
 
     ///////////////////////////// POOLING TENSORS AND DESCRIPTORS /////////////////////////////   
 
@@ -92,7 +97,7 @@ void CNNLayer::CreateandSetDescs() {
                                            batchSize, outputChannels, poolHeight, poolWidth));
 
     // Allocate memory for pooling tensor
-    cudaMalloc(&deviceOutput, batchSize * outputChannels * poolHeight * poolWidth * sizeof(float));
+    CHECK_CUDA(cudaMalloc(&deviceOutput, batchSize * outputChannels * poolHeight * poolWidth * sizeof(float)));
 
     /////////////////////////////////////////////////////////////////////////
     ///////////////////////////// BACKWARD PASS /////////////////////////////   
@@ -101,20 +106,20 @@ void CNNLayer::CreateandSetDescs() {
     ///////////////////////////// POOLING TENSORS AND DESCRIPTORS /////////////////////////////   
 
     // Allocate memory for grad of pooling input tensor
-    cudaMalloc(&deviceActGrad, batchSize * outputChannels * convHeight * convWidth * sizeof(float));
+    CHECK_CUDA(cudaMalloc(&deviceActGrad, batchSize * outputChannels * convHeight * convWidth * sizeof(float)));
 
     ///////////////////////////// ACTIVATION TENSORS AND DESCRIPTORS /////////////////////////////   
 
     // Allocate memory for grad of activation input tensor
-    cudaMalloc(&deviceConvGrad, batchSize * outputChannels * convHeight * convWidth * sizeof(float));
+    CHECK_CUDA(cudaMalloc(&deviceConvGrad, batchSize * outputChannels * convHeight * convWidth * sizeof(float)));
 
     ///////////////////////////// CONVOLUTION TENSORS AND DESCRIPTORS /////////////////////////////   
 
     // Allocate memory for grad of convolution input tensor
-    cudaMalloc(&deviceInputGrad, batchSize * inputChannels * inputWidth * inputHeight * sizeof(float));
+    CHECK_CUDA(cudaMalloc(&deviceInputGrad, batchSize * inputChannels * inputWidth * inputHeight * sizeof(float)));
 
     // Allocate memory for grad of convolution filter tensor
-    cudaMalloc(&deviceFilterGrad, inputChannels * outputChannels * filterHeight * filterWidth * sizeof(float));
+    CHECK_CUDA(cudaMalloc(&deviceFilterGrad, inputChannels * outputChannels * filterHeight * filterWidth * sizeof(float)));
 
 
 }
@@ -132,35 +137,22 @@ void CNNLayer::FreeMemory() {
     cudnnDestroyPoolingDescriptor(poolDesc);
 
     // Free intermediate buffers
-    cudaFree(deviceConv);
-    cudaFree(deviceOutput);
-    cudaFree(deviceAct);
-    cudaFree(deviceFilter);
+    CHECK_CUDA(cudaFree(deviceConv));
+    CHECK_CUDA(cudaFree(deviceOutput));
+    CHECK_CUDA(cudaFree(deviceAct));
+    CHECK_CUDA(cudaFree(deviceFilter));
 
-    cudaFree(deviceActGrad);
-    cudaFree(deviceConvGrad);
-    cudaFree(deviceInputGrad);
-    cudaFree(deviceFilterGrad);
+    CHECK_CUDA(cudaFree(deviceActGrad));
+    CHECK_CUDA(cudaFree(deviceConvGrad));
+    CHECK_CUDA(cudaFree(deviceInputGrad));
+    CHECK_CUDA(cudaFree(deviceFilterGrad));
 
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        std::cerr << "CUDA error: " << cudaGetErrorString(err)
-                  << " in File " << __FILE__
-                  << " in line " << __LINE__
-                  << std::endl;
-        exit(EXIT_FAILURE);
-    }
 }
 
 // Forward pass
-float* CNNLayer::ForwardPass(const float* Input) {
+float* CNNLayer::ForwardPass(const float* deviceInput) {
 
-    // reset memory
-    deviceInput = Input;
-
-    cudaMemset(deviceConv, 0, batchSize * convWidth * convHeight * outputChannels * sizeof(float));
-    cudaMemset(deviceAct, 0, batchSize * convWidth * convHeight * outputChannels * sizeof(float));
-    cudaMemset(deviceOutput, 0, batchSize * poolWidth * poolHeight * outputChannels * sizeof(float));
+    this->deviceInput = deviceInput;
 
     LaunchConvolutionKernel();
     LaunchActivationKernel();
@@ -170,38 +162,35 @@ float* CNNLayer::ForwardPass(const float* Input) {
 
 }
 
-float* CNNLayer::BackwardPass(const float* OutputGrad) {
+float* CNNLayer::BackwardPass(const float* deviceOutputGrad) {
 
-    // Reset gradient buffers
-    deviceOutputGrad = OutputGrad;
-
-    cudaMemset(deviceActGrad, 0, batchSize * outputChannels * convHeight * convWidth * sizeof(float));
-    cudaMemset(deviceConvGrad, 0, batchSize * outputChannels * convHeight * convWidth * sizeof(float));
-    cudaMemset(deviceInputGrad, 0, batchSize * inputChannels * inputHeight * inputWidth * sizeof(float));
-    cudaMemset(deviceFilterGrad, 0, outputChannels * inputChannels * filterHeight * filterWidth * sizeof(float));
+    this->deviceOutputGrad = deviceOutputGrad;
 
     LaunchBackwardMaxPoolingKernel();
     LaunchBackwardActivationKernel();
     LaunchBackwardConvolutionKernel();
+
+    UpdateWeights();
 
     return deviceInputGrad;
 
 }
 
 
-// void CNNLayer::UpdateWeights() {
-//     // Update weights (filters)
-//     float alpha = -learningRate; // Learning rate scaling factor for gradient descent
-//     float beta = 1.0f;            // For in-place update
+void CNNLayer::UpdateWeights() {
+    // Update weights (filters)
+    float alpha = -learningrate; 
+    float beta = 1.0f;            
 
-//     // Update filters using gradients
-//     CHECK_CUDNN(cudnnAddTensor(cudnn, &alpha, filterDesc, deviceGradFilter,
-//                                 &beta, filterDesc, deviceFilter));
+    // Update filters using gradients
+    CHECK_CUDNN(cudnnAddTensor(cudnn, &alpha, filterTensorDesc, deviceFilterGrad,
+                                &beta, filterTensorDesc, deviceFilter));
 
-//     cudaDeviceSynchronize();
-// }
+    cudaDeviceSynchronize();
+}
 
 void CNNLayer::LaunchConvolutionKernel() {
+    float alpha = 1.0f, beta = 0.0f;
 
     // Perform convolution
     CHECK_CUDNN(cudnnConvolutionForward(cudnn, &alpha, inputDesc, deviceInput, filterDesc, deviceFilter,
@@ -213,6 +202,7 @@ void CNNLayer::LaunchConvolutionKernel() {
 }
 
 void CNNLayer::LaunchActivationKernel() {
+    float alpha = 1.0f, beta = 0.0f;
 
     // Apply ReLU activation function
     CHECK_CUDNN(cudnnActivationForward(cudnn, activationDesc, &alpha, outputconvDesc, deviceConv,
@@ -223,6 +213,7 @@ void CNNLayer::LaunchActivationKernel() {
 }
 
 void CNNLayer::LaunchMaxPoolingKernel() {
+    float alpha = 1.0f, beta = 0.0f;
 
     // Perform max pooling
     CHECK_CUDNN(cudnnPoolingForward(cudnn, poolDesc, &alpha, outputconvDesc, deviceAct,
@@ -234,6 +225,9 @@ void CNNLayer::LaunchMaxPoolingKernel() {
 
 // Backward Max Pooling Kernel
 void CNNLayer::LaunchBackwardMaxPoolingKernel() {
+
+    float alpha = 1.0f, beta = 0.0f;
+
     CHECK_CUDNN(cudnnPoolingBackward(cudnn, poolDesc, &alpha, outputpoolDesc, deviceOutput,
                                      outputpoolDesc, deviceOutputGrad, outputconvDesc, deviceAct, &beta, outputconvDesc, deviceActGrad));
                                      
@@ -242,6 +236,8 @@ void CNNLayer::LaunchBackwardMaxPoolingKernel() {
 
 // Backward Activation Kernel
 void CNNLayer::LaunchBackwardActivationKernel() {
+    float alpha = 1.0f, beta = 0.0f;
+
     CHECK_CUDNN(cudnnActivationBackward(cudnn, activationDesc, &alpha, outputconvDesc, deviceAct,
                                         outputconvDesc, deviceActGrad, outputconvDesc, deviceConv, &beta, outputconvDesc, deviceConvGrad));
 
@@ -250,6 +246,8 @@ void CNNLayer::LaunchBackwardActivationKernel() {
 
 // Backward Convolution Kernel
 void CNNLayer::LaunchBackwardConvolutionKernel() {
+    float alpha = 1.0f, beta = 0.0f;
+
     CHECK_CUDNN(cudnnConvolutionBackwardData(cudnn, &alpha, filterDesc, deviceFilter,
                                              outputconvDesc, deviceConvGrad, convDesc,
                                              CUDNN_CONVOLUTION_BWD_DATA_ALGO_0,
@@ -265,15 +263,26 @@ void CNNLayer::LaunchBackwardConvolutionKernel() {
 
 // Initialize filters 
 void CNNLayer::SetFilters() {
+
     int filter_num_elements = filterHeight * filterWidth * inputChannels * outputChannels;
-    initializeWeights<<<1, filter_num_elements>>>(deviceFilter, filter_num_elements, 1234ULL, -0.5f, 0.5f);
+    int threadsPerBlock = 256; // Choose a value that's a power of 2, usually 256 or 512
+    int blocksPerGrid = (filter_num_elements + threadsPerBlock - 1) / threadsPerBlock; // Calculate total blocks needed
+
+    initializeWeights<<<blocksPerGrid, threadsPerBlock>>>(deviceFilter, filter_num_elements, 1234ULL, -0.5f, 0.5f);
+
+    // Ensure the kernel is executed correctly
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        std::cerr << "CUDA error: " << cudaGetErrorString(err)
+                << " in File " << __FILE__
+                << " in line " << __LINE__
+                << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    cudaDeviceSynchronize();
+
 }
-
-
-// void CNNLayer::UpdateWeights(float learningRate) {
-//     int filter_num_elements = filterHeight * filterWidth * inputChannels * outputChannels;
-//     updateWeightsKernel<<<1, filter_num_elements>>>(deviceFilter, filter_num_elements, deviceFilterGrad, learningRate);
-// }
 
 
 // Get output from device to host

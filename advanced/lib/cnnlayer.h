@@ -7,13 +7,24 @@
 #include <npp.h>
 #include <nppi.h>
 #include <cudnn.h>
-#include <kernel_init.h>
+#include <kernel.h>
 
 // Error checking macro for cuDNN calls
 #define CHECK_CUDNN(call) \
     if ((call) != CUDNN_STATUS_SUCCESS) { \
         std::cerr << "cuDNN error at line " << __LINE__ << std::endl; \
         exit(EXIT_FAILURE); \
+    }
+
+
+#define CHECK_CUDA(call)                                                       \
+    {                                                                          \
+        cudaError_t err = call;                                              \
+        if (err != cudaSuccess) {                                           \
+            std::cerr << "CUDA error: " << cudaGetErrorString(err) << " in " \
+                      << __FILE__ << " at line " << __LINE__ << std::endl; \
+            exit(EXIT_FAILURE);                                             \
+        }                                                                      \
     }
 
 class CNNLayer {
@@ -24,7 +35,7 @@ public:
             int strideHeight, int strideWidth,
             int paddingHeight, int paddingWidth,
             int outputChannels, int inputChannels,
-            int batchSize);
+            int batchSize, float learningrate);
 
     // Destructor
     ~CNNLayer();
@@ -46,11 +57,11 @@ private:
     int poolWidth, poolHeight;
     int convHeight, convWidth;
     int batchSize;
-    float alpha = 1.0f, beta = 0.0f;
+    float learningrate;
     cudnnHandle_t cudnn;
 
     // Create tensor descriptors for input, output, and filters
-    cudnnTensorDescriptor_t inputDesc, outputconvDesc, outputpoolDesc;
+    cudnnTensorDescriptor_t inputDesc, outputconvDesc, outputpoolDesc, filterTensorDesc;
     cudnnPoolingDescriptor_t poolDesc;
     cudnnFilterDescriptor_t filterDesc;
     cudnnConvolutionDescriptor_t convDesc;
@@ -77,7 +88,7 @@ private:
     void LaunchBackwardMaxPoolingKernel();
     void LaunchBackwardActivationKernel();
     void LaunchBackwardConvolutionKernel();
-    void UpdateWeights(float learningRate);
+    void UpdateWeights();
 
 };
 
