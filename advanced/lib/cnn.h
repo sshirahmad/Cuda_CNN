@@ -7,7 +7,9 @@
 #include <npp.h>
 #include <nppi.h>
 #include <cudnn.h>
-#include <cnnlayer.h>
+#include <convolution.h>
+#include <pooling.h>
+#include <activation.h>
 #include <fclayer.h>
 #include <kernel.h>
 #include <loss.h>
@@ -71,11 +73,18 @@ private:
     int flattenedSize;
 
     // CNN Layers
-    CNNLayer* Layer1 = nullptr;
-    CNNLayer* Layer2 = nullptr;
-    CNNLayer* Layer3 = nullptr;
-    FCLayer* Layer4 = nullptr;
-    FCLayer* Layer5 = nullptr;
+    ConvolutionLayer* C1 = nullptr;
+    ActivationLayer* A1 = nullptr;
+    PoolingLayer* P1 = nullptr;
+    ConvolutionLayer* C2 = nullptr;
+    ActivationLayer* A2 = nullptr;
+    PoolingLayer* P2 = nullptr;
+    ConvolutionLayer* C3 = nullptr;
+    ActivationLayer* A3 = nullptr;
+    PoolingLayer* P3 = nullptr;
+    FCLayer* F4 = nullptr;
+    ActivationLayer* A4 = nullptr;
+    FCLayer* F5 = nullptr;
 
     float* deviceInput;
     float* deviceLoss;

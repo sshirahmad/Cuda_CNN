@@ -23,10 +23,8 @@ void FCLayer::AllocateMemory() {
     CHECK_CUDA(cudaMalloc(&deviceBiasGrad, outputSize * sizeof(float)));
 
     CHECK_CUDA(cudaMalloc(&ones, batchSize * sizeof(float)));
-    CHECK_CUDA(cudaMalloc(&onesm, outputSize * outputSize * sizeof(float)));
 
     CHECK_CUDA(cudaMemset(ones, 1.0f, batchSize * sizeof(float)));
-    CHECK_CUDA(cudaMemset(onesm, 1.0f, outputSize * outputSize * sizeof(float)));
 
 }
 
@@ -39,7 +37,6 @@ void FCLayer::FreeMemory() {
     CHECK_CUDA(cudaFree(deviceWeightGrad));
     CHECK_CUDA(cudaFree(deviceBiasGrad));
     CHECK_CUDA(cudaFree(ones));
-    CHECK_CUDA(cudaFree(onesm));
 
 }
 
@@ -129,13 +126,11 @@ void FCLayer::UpdateWeightsAndBiases() {
     const float alpha = -learningRate;
     const float beta = 1.0f;
 
-    // Update weights
-    CHECK_CUBLAS(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N,
-                outputSize, inputSize, outputSize,
-                &alpha,
-                onesm, outputSize,
-                deviceWeightGrad, outputSize,
-                &beta, deviceWeight, outputSize));
+    CHECK_CUBLAS(cublasSaxpy(cublasHandle, 
+                            inputSize * outputSize, 
+                            &alpha,        // Learning rate
+                            deviceWeightGrad, 1,  // Scaled dW
+                            deviceWeight, 1));    // Existing weights
 
     // Update biases
     CHECK_CUBLAS(cublasSaxpy(cublasHandle, outputSize, &alpha, deviceBiasGrad, 1, deviceBias, 1)); 
@@ -152,12 +147,13 @@ void FCLayer::InitializeWeights() {
     int threadsPerBlock = 256; // Choose a value that's a power of 2, usually 256 or 512
     int blocksPerGrid = (weight_num_elements + threadsPerBlock - 1) / threadsPerBlock; // Calculate total blocks needed
 
-    initializeWeights<<<blocksPerGrid, threadsPerBlock>>>(deviceWeight, weight_num_elements, 1234ULL, -0.5f, 0.5f);
+    // initializeUniformWeights<<<blocksPerGrid, threadsPerBlock>>>(deviceWeight, weight_num_elements, 1234ULL, -0.0f, 0.01f);
+    initializeXavierWeights<<<blocksPerGrid, threadsPerBlock>>>(deviceWeight, weight_num_elements, 1234ULL, inputSize);
 
     int bias_num_elements = outputSize;
     blocksPerGrid = (bias_num_elements + threadsPerBlock - 1) / threadsPerBlock; // Calculate total blocks needed
 
-    initializeWeights<<<blocksPerGrid, threadsPerBlock>>>(deviceBias, bias_num_elements, 1234ULL, -0.5f, 0.5f);
+    initializeBias<<<blocksPerGrid, threadsPerBlock>>>(deviceBias, bias_num_elements, 0.0f);
 
 
     // Ensure the kernel is executed correctly

@@ -1,4 +1,3 @@
-#include <../lib/cnnlayer.h>
 #include <../lib/cnn.h>
 #include <../lib/augmentations.h>
 #include <../lib/utils.h>
@@ -209,9 +208,9 @@ int main(int argc, char* argv[]) {
     // Initialize convolution paramters
     int filterHeight = 3, filterWidth = 3; 
     int strideHeight = 1, strideWidth = 1;
-    int paddingHeight = 1, paddingWidth = 1;
-    int numFilters = 32;
-    int hiddenDim = 32, numClass = 10;
+    int paddingHeight = 0, paddingWidth = 0;
+    int numFilters = 16;
+    int hiddenDim = 16, numClass = 10;
     int batchSize = 128;
     float learningrate = 0.0001;
     bool debug = false;
@@ -221,17 +220,15 @@ int main(int argc, char* argv[]) {
     ImageAugmentation Augmentor(srcWidth, srcHeight, dstWidth, dstHeight, numChannels);
 
     // Construct the network
-    CNN CNNModel(cudnn, cublas, srcHeight, srcWidth, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, numFilters, numChannels, hiddenDim, numClass, batchSize, learningrate);
+    CNN CNNModel(cudnn, cublas, dstHeight, dstWidth, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, numFilters, numChannels, hiddenDim, numClass, batchSize, learningrate);
 
     // Vectors for batches
     int imageSize = numChannels * dstHeight * dstWidth;
     std::vector<float> lossPerEpoch(epochs);
-
     std::vector<float*> batch_images;
     std::vector<float> hostInput(batchSize * imageSize);
     std::vector<int> hostLabel;
     std::vector<std::string> batch_filenames;
-
     for (size_t e = 0; e < epochs; ++e) {
 
         float epochLoss = 0.0f;
@@ -246,6 +243,22 @@ int main(int argc, char* argv[]) {
 
             // Pre-process images
             float* output = Augmentor.augment(img);
+
+            // auto logits = CNNModel.ForwardPass(output, &label); 
+            // auto deviceLoss = CNNModel.ComputeLoss(); 
+            // CNNModel.BackwardPass(); 
+
+            // // Now `mean` holds the average of your weights
+            // printf("Mean of weights: %f\n", mean);
+
+            // // Copy batch loss from device to host
+            // float batchLoss = 0.0f;
+            // cudaMemcpy(&batchLoss, deviceLoss, sizeof(float), cudaMemcpyDeviceToHost);
+
+            // epochLoss += batchLoss;
+
+            // // Update the progress bar
+            // printProgressBar(i + 1, h_images.size());
 
             batch_images.push_back(output);
             batch_filenames.push_back(filename);
@@ -289,10 +302,10 @@ int main(int argc, char* argv[]) {
                     }
 
                     // Save output images
-                    for (size_t j = 0; j < batch_images.size(); ++j) {
-                        auto [outputWidth, outputHeight, outputImage] = CNNModel.GetOutput(j);  
-                        save_image(outputWidth, outputHeight, outputImage, 1, batch_filenames[j]);
-                    }
+                    // for (size_t j = 0; j < batch_images.size(); ++j) {
+                    //     auto [outputWidth, outputHeight, outputImage] = CNNModel.GetOutput(j);  
+                    //     save_image(outputWidth, outputHeight, outputImage, 1, batch_filenames[j]);
+                    // }
                 }
 
                 // Clear the batch
@@ -317,3 +330,22 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
+
+
+
+            // // Assuming `deviceWeights` is a pointer to weights on GPU, and `numWeights` is the number of weights
+            // int numWeights = batchSize * numClass;
+            // float* hostWeights = (float*)malloc(numWeights * sizeof(float));
+
+            // // Copy the weights from GPU to CPU
+            // cudaMemcpy(hostWeights, logits, numWeights * sizeof(float), cudaMemcpyDeviceToHost);
+
+            // // Calculate the mean on the CPU
+            // float sum = 0.0f;
+            // for (int i = 0; i < numWeights; ++i) {
+            //     sum += hostWeights[i];
+            // }
+            // float mean = sum / numWeights;
+
+            // // Clean up
+            // free(hostWeights);

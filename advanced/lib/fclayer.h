@@ -45,7 +45,6 @@ private:
     float learningRate;
 
     float* ones;
-    float* onesm;
 
     // Device pointers
     const float* deviceInput;

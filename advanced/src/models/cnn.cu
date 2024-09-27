@@ -46,17 +46,12 @@ void CNN::AllocateMemory() {
     // Allocate memory for loss gradient tensor
     CHECK_CUDA(cudaMalloc(&deviceOutputGrad, batchSize * numClass * sizeof(float)));
 
-
-
 }
 
 std::tuple<int, int> CNN::CalculateDim(int inHeight, int inWidth){
 
-    int tempHeight = (inHeight + 2 * paddingHeight - filterHeight) / strideHeight + 1;
-    int tempWidth = (inWidth + 2 * paddingWidth - filterWidth) / strideWidth + 1;
-
-    int outHeight = (tempHeight + 2 * paddingHeight - filterHeight) / strideHeight + 1;
-    int outWidth = (tempWidth + 2 * paddingWidth - filterWidth) / strideWidth + 1;
+    int outHeight = (inHeight + 2 * paddingHeight - filterHeight) / strideHeight + 1;
+    int outWidth = (inWidth + 2 * paddingWidth - filterWidth) / strideWidth + 1;
 
     return {outHeight, outWidth};
 
@@ -65,29 +60,44 @@ std::tuple<int, int> CNN::CalculateDim(int inHeight, int inWidth){
 
 void CNN::BuildModel() {
 
-    // Build first layer
+    // Build First CNN
     int cnnChannels1 = numFilter;
-    Layer1 = new CNNLayer(cudnn, inputHeight, inputWidth, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels1, inputChannels, batchSize, learningrate);
-
-    // Build Second layer
-    int cnnChannels2 = cnnChannels1 / 2;
+    C1 = new ConvolutionLayer(cudnn, inputHeight, inputWidth, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels1, inputChannels, batchSize, learningrate);
     auto[inputHeight2, inputWidth2] = CalculateDim(inputHeight, inputWidth);
-    Layer2 = new CNNLayer(cudnn, inputHeight2, inputWidth2, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels2, cnnChannels1, batchSize, learningrate);
 
-    // Build Third layer
-    int cnnChannels3 = cnnChannels2 / 2;
+    A1 = new ActivationLayer(cudnn, inputHeight2, inputWidth2, cnnChannels1, batchSize);
+
+    P1 = new PoolingLayer(cudnn, inputHeight2, inputWidth2, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels1, batchSize);
     auto[inputHeight3, inputWidth3] = CalculateDim(inputHeight2, inputWidth2);
-    Layer3 = new CNNLayer(cudnn, inputHeight3, inputWidth3, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels3, cnnChannels2, batchSize, learningrate);
 
+    // Build Second CNN
+    int cnnChannels2 = cnnChannels1 / 2;
+    C2 = new ConvolutionLayer(cudnn, inputHeight3, inputWidth3, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels2, inputChannels, batchSize, learningrate);
+    auto[inputHeight4, inputWidth4] = CalculateDim(inputHeight3, inputWidth3);
+
+    A2 = new ActivationLayer(cudnn, inputHeight4, inputWidth4, cnnChannels2, batchSize);
+
+    P2 = new PoolingLayer(cudnn, inputHeight4, inputWidth4, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels2, batchSize);
+    auto[inputHeight5, inputWidth5] = CalculateDim(inputHeight4, inputWidth4);
+
+    // Build Third CNN
+    int cnnChannels3 = cnnChannels2 / 2;
+    C3 = new ConvolutionLayer(cudnn, inputHeight5, inputWidth5, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels3, inputChannels, batchSize, learningrate);
+    auto[inputHeight6, inputWidth6] = CalculateDim(inputHeight5, inputWidth5);
+
+    A3 = new ActivationLayer(cudnn, inputHeight6, inputWidth6, cnnChannels3, batchSize);
+
+    P3 = new PoolingLayer(cudnn, inputHeight6, inputWidth6, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels3, batchSize);
+    std::tie(outputHeight, outputWidth) = CalculateDim(inputHeight6, inputWidth6);
     outputChannels = cnnChannels3;
-    std::tie(outputHeight, outputWidth) = CalculateDim(inputHeight3, inputWidth3);
 
-    // Build fourth layer
-    flattenedSize = batchSize * outputHeight * outputWidth * outputChannels;
-    Layer4 = new FCLayer(cublas, outputHeight * outputWidth * outputChannels, hiddenDim, batchSize, learningrate);
+    // Build First FC
+    // flattenedSize = batchSize * outputHeight * outputWidth * outputChannels;
+    F4 = new FCLayer(cublas, outputHeight * outputWidth * outputChannels, hiddenDim, batchSize, learningrate);
+    A4 = new ActivationLayer(cudnn, 1, 1, hiddenDim, batchSize);
 
-    // Build fifth layer
-    Layer5 = new FCLayer(cublas, hiddenDim, numClass, batchSize, learningrate);
+    // Build Second FC
+    F5 = new FCLayer(cublas, hiddenDim, numClass, batchSize, learningrate);
 
 }
 
@@ -100,11 +110,18 @@ void CNN::FreeMemory() {
     CHECK_CUDA(cudaFree(deviceLabels));
     CHECK_CUDA(cudaFree(deviceOutputGrad));
 
-    delete Layer1;
-    delete Layer2;
-    delete Layer3;
-    delete Layer4;
-    delete Layer5;
+    delete C1;
+    delete A1;
+    delete P1;
+    delete C2;
+    delete A2;
+    delete P2;
+    delete C3;
+    delete A3;
+    delete P3;
+    delete F4;
+    delete A4;
+    delete F5;
 
 }
 
@@ -115,9 +132,19 @@ float* CNN::ForwardPass(const float* hostInput, const int* hostLabels) {
     CHECK_CUDA(cudaMemcpy(deviceLabels, hostLabels, batchSize * sizeof(int), cudaMemcpyHostToDevice));
 
     // CNN
-    auto deviceOutput1 = Layer1->ForwardPass(deviceInput);
-    auto deviceOutput2 = Layer2->ForwardPass(deviceOutput1);
-    cnnOutput = Layer3->ForwardPass(deviceOutput2);
+    auto C1Output = C1->ForwardPass(deviceInput);
+    auto A1Output = A1->ForwardPass(C1Output);
+    auto P1Output = P1->ForwardPass(A1Output);
+
+    auto C2Output = C2->ForwardPass(P1Output);
+    auto A2Output = A2->ForwardPass(C2Output);
+    auto P2Output = P2->ForwardPass(A2Output);
+
+    auto C3Output = C3->ForwardPass(P2Output);
+    auto A3Output = A3->ForwardPass(C3Output);
+    auto P3Output = P3->ForwardPass(A3Output);
+
+    cnnOutput = P3Output;
 
     // // Launch flattening kernel
     // int blockSize = 256;  
@@ -137,8 +164,11 @@ float* CNN::ForwardPass(const float* hostInput, const int* hostLabels) {
     // FC
     // FCs are implemented using cuBLAS, so all amtrices have to be stored in column major order. 
     // flatten_NCHW stores the cnn output in row major order so we'll use the transpose of matrices. 
-    auto deviceOutput4 = Layer4->ForwardPass(cnnOutput);
-    fcLogits = Layer5->ForwardPass(deviceOutput4);
+    auto F4Output = F4->ForwardPass(P3Output);
+    auto A4Output = A4->ForwardPass(F4Output);
+    auto F5Output = F5->ForwardPass(A4Output);
+
+    fcLogits = F5Output;
 
     cudaDeviceSynchronize();
 
@@ -148,17 +178,31 @@ float* CNN::ForwardPass(const float* hostInput, const int* hostLabels) {
 
 void CNN::BackwardPass() {
 
-    auto deviceInputGrad5 = Layer5->BackwardPass(deviceOutputGrad);
-    auto deviceInputGrad4 = Layer4->BackwardPass(deviceInputGrad5);
-    auto deviceInputGrad3 = Layer3->BackwardPass(deviceInputGrad4);
-    auto deviceInputGrad2 = Layer2->BackwardPass(deviceInputGrad3);
-    auto deviceInputGrad = Layer1->BackwardPass(deviceInputGrad2);
+    auto F5InputGrad = F5->BackwardPass(deviceOutputGrad);
+
+    auto A4InputGrad = A4->BackwardPass(F5InputGrad);
+    auto F4InputGrad = F4->BackwardPass(A4InputGrad);
+
+    auto P3InputGrad = P3->BackwardPass(F4InputGrad);
+    auto A3InputGrad = A3->BackwardPass(P3InputGrad);
+    auto C3InputGrad = C3->BackwardPass(A3InputGrad);
+
+    auto P2InputGrad = P2->BackwardPass(C3InputGrad);
+    auto A2InputGrad = A2->BackwardPass(P2InputGrad);
+    auto C2InputGrad = C2->BackwardPass(A2InputGrad);
+
+    auto P1InputGrad = P1->BackwardPass(C2InputGrad);
+    auto A1InputGrad = A1->BackwardPass(P1InputGrad);
+    auto C1InputGrad = C1->BackwardPass(A1InputGrad);
 
     cudaDeviceSynchronize();
 
 }
 
 float* CNN::ComputeLoss() {
+
+    CHECK_CUDA(cudaMemset(deviceLoss, 0.0f, sizeof(float)));
+
     
     // Call a kernel to compute cross-entropy loss
     int blockSize = 256;  // You can tune this

@@ -28,7 +28,6 @@ __global__ void cross_entropy_loss_with_logits(float* logits, int* labels, float
 }
 
 
-
 __global__ void cross_entropy_gradient_with_logits(float* logits, int* labels, float* grad, int numClasses, int batchSize) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -52,10 +51,11 @@ __global__ void cross_entropy_gradient_with_logits(float* logits, int* labels, f
             float softmax_prob = expf(logits[idx * numClasses + c] - maxLogit) / sumExp;
 
             if (c == label) {
-                grad[idx * numClasses + c] = softmax_prob - 1.0f;  // True class: p_j - 1
+                grad[idx * numClasses + c] = softmax_prob - 1;  // True class: p_j - 1
             } else {
                 grad[idx * numClasses + c] = softmax_prob;         // Other classes: p_j
             }
+
         }
     }
 }
