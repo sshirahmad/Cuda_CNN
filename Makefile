@@ -48,7 +48,7 @@ $(TARGET): $(SRC)
 
 # Rule for running the application
 run: $(TARGET)
-	$(TARGET) -d "../data/train/" -w 28 -h 28
+	$(TARGET) -d "../data/" -w 28 -h 28
 
 # Clean up
 clean:

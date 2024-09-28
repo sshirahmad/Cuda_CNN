@@ -10,7 +10,7 @@
 
 __global__ void cross_entropy_loss_with_logits(float* logits, int* labels, float* loss, int numClasses, int batchSize);
 __global__ void cross_entropy_gradient_with_logits(float* logits, int* labels, float* grad, int numClasses, int batchSize);
-
+__global__ void calculate_accuracy(float* logits, int* labels, float* accuracy, int numClasses, int batchSize);
 
 
 #endif // LOSS_H

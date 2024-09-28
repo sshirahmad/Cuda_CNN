@@ -1,7 +1,7 @@
 #include "../lib/convolution.h"
 
 // CNNLayer Constructor
-ConvolutionLayer::ConvolutionLayer(cudnnHandle_t cudnn,
+ConvolutionLayer::ConvolutionLayer(cudnnHandle_t cudnn, cublasHandle_t cublas,
                     int inputHeight, int inputWidth,
                     int filterHeight, int filterWidth,
                     int strideHeight, int strideWidth,
@@ -9,7 +9,7 @@ ConvolutionLayer::ConvolutionLayer(cudnnHandle_t cudnn,
                     int outputChannels, int inputChannels,
                     int batchSize, float learningrate)
                 :
-    cudnn(cudnn),  
+    cudnn(cudnn), cublas(cublas),
     inputHeight(inputHeight), inputWidth(inputWidth),
     filterHeight(filterHeight), filterWidth(filterWidth),
     strideHeight(strideHeight), strideWidth(strideWidth),
@@ -127,9 +127,16 @@ void ConvolutionLayer::UpdateWeights() {
     float alpha = -learningrate; 
     float beta = 1.0f;            
 
-    // Update filters using gradients
-    CHECK_CUDNN(cudnnAddTensor(cudnn, &alpha, filterTensorDesc, deviceFilterGrad,
-                                &beta, filterTensorDesc, deviceFilter));
+    // // Update filters using gradients
+    // CHECK_CUDNN(cudnnAddTensor(cudnn, &alpha, filterTensorDesc, deviceFilterGrad,
+    //                             &beta, filterTensorDesc, deviceFilter));
+
+
+    CHECK_CUBLAS(cublasSaxpy(cublas, 
+                inputChannels * outputChannels * filterHeight * filterWidth, 
+                &alpha,        // Learning rate
+                deviceFilterGrad, 1,  // Scaled dW
+                deviceFilter, 1));    // Existing weights
 
     cudaDeviceSynchronize();
 }

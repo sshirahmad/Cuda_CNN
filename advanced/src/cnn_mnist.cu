@@ -2,6 +2,8 @@
 #include <../lib/augmentations.h>
 #include <../lib/utils.h>
 #include <random>
+#include <algorithm> 
+#include <numeric> 
 
 std::tuple<std::vector<float*>, int, int, int, std::vector<std::string>> read_images(const fs::path& directory) {
     std::vector<float*> images;
@@ -199,18 +201,22 @@ int main(int argc, char* argv[]) {
 
     auto[directory, dstWidth, dstHeight] = parseArguments(argc, argv);
     
-    // Read images and labels
-    std::string image_directory = directory + "mnist_images";
-    std::string label_directory =  directory + "mnist_labels.csv";
-    auto[h_images, srcWidth, srcHeight, numChannels, filenames] = read_images(image_directory);
-    auto labels = readLabelsFromCSV(label_directory);
+    // Read train images and labels
+    std::string train_image_directory = directory + "train/mnist_images";
+    std::string train_label_directory =  directory + "train/mnist_labels.csv";
+    std::string test_image_directory = directory + "test/mnist_images";
+    std::string test_label_directory =  directory + "test/mnist_labels.csv";
+    auto[train_h_images, srcWidth, srcHeight, numChannels, train_filenames] = read_images(train_image_directory);
+    auto train_labels = readLabelsFromCSV(train_label_directory);
+    auto[test_h_images, tsrcWidth, tsrcHeight, tnumChannels, test_filenames] = read_images(test_image_directory);
+    auto test_labels = readLabelsFromCSV(test_label_directory);
 
     // Initialize convolution paramters
     int filterHeight = 3, filterWidth = 3; 
     int strideHeight = 1, strideWidth = 1;
-    int paddingHeight = 0, paddingWidth = 0;
-    int numFilters = 16;
-    int hiddenDim = 16, numClass = 10;
+    int paddingHeight = 1, paddingWidth = 1;
+    int numFilters = 64;
+    int hiddenDim = 64, numClass = 10;
     int batchSize = 128;
     float learningrate = 0.0001;
     bool debug = false;
@@ -222,6 +228,8 @@ int main(int argc, char* argv[]) {
     // Construct the network
     CNN CNNModel(cudnn, cublas, dstHeight, dstWidth, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, numFilters, numChannels, hiddenDim, numClass, batchSize, learningrate);
 
+    //////////////////////// TRAINING ////////////////////////
+
     // Vectors for batches
     int imageSize = numChannels * dstHeight * dstWidth;
     std::vector<float> lossPerEpoch(epochs);
@@ -231,34 +239,38 @@ int main(int argc, char* argv[]) {
     std::vector<std::string> batch_filenames;
     for (size_t e = 0; e < epochs; ++e) {
 
+        // Shuffle data at the start of each epoch
+        std::vector<size_t> indices(train_h_images.size());
+        std::iota(indices.begin(), indices.end(), 0); // Create an index array [0, 1, 2, ..., n-1]
+
+        // Use a random engine for shuffling
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::shuffle(indices.begin(), indices.end(), g); 
+
+        // Shuffle images, filenames, and labels based on the shuffled indices
+        std::vector<std::string> shuffledFilenames(train_filenames.size());
+        std::vector<float*> shuffledImages(train_h_images.size());
+        std::vector<int> shuffledLabels(train_labels.size());
+
+        for (size_t i = 0; i < indices.size(); ++i) {
+            shuffledImages[i] = train_h_images[indices[i]];
+            shuffledFilenames[i] = train_filenames[indices[i]];
+            shuffledLabels[i] = train_labels[indices[i]];
+        }
+
         float epochLoss = 0.0f;
 
         std::cout << "Epoch " << e + 1 << "/" << epochs << std::endl;
 
-        for (size_t i = 0; i < h_images.size(); ++i) {
+        for (size_t i = 0; i < shuffledImages.size(); ++i) {
 
-            const auto& img = h_images[i];
-            const auto& filename = filenames[i]; 
-            const auto& label = labels[i]; 
+            const auto& img = shuffledImages[i];
+            const auto& filename = shuffledFilenames[i]; 
+            const auto& label = shuffledLabels[i]; 
 
             // Pre-process images
             float* output = Augmentor.augment(img);
-
-            // auto logits = CNNModel.ForwardPass(output, &label); 
-            // auto deviceLoss = CNNModel.ComputeLoss(); 
-            // CNNModel.BackwardPass(); 
-
-            // // Now `mean` holds the average of your weights
-            // printf("Mean of weights: %f\n", mean);
-
-            // // Copy batch loss from device to host
-            // float batchLoss = 0.0f;
-            // cudaMemcpy(&batchLoss, deviceLoss, sizeof(float), cudaMemcpyDeviceToHost);
-
-            // epochLoss += batchLoss;
-
-            // // Update the progress bar
-            // printProgressBar(i + 1, h_images.size());
 
             batch_images.push_back(output);
             batch_filenames.push_back(filename);
@@ -285,7 +297,7 @@ int main(int argc, char* argv[]) {
                 epochLoss += batchLoss;
 
                 // Update the progress bar
-                printProgressBar(i + 1, h_images.size());
+                printProgressBar(i + 1, train_h_images.size());
 
                 // Print logits for each class in each batch (debug mode)
                 if (debug) {
@@ -317,11 +329,64 @@ int main(int argc, char* argv[]) {
         }
 
         // Average the loss over the batches
-        lossPerEpoch[e] = epochLoss / (h_images.size() / batchSize);
+        lossPerEpoch[e] = epochLoss / (train_h_images.size() / batchSize);
 
         // Display final loss after the epoch
         std::cout << std::endl << "Epoch " << e + 1 << " completed. Loss: " << lossPerEpoch[e] << std::endl << std::endl;
     }
+
+
+    //////////////////////// TEST ////////////////////////
+    float accuracy = 0.0f;
+    size_t totalSamples = train_h_images.size();
+    size_t numBatches = (totalSamples + batchSize - 1) / batchSize;  // Calculate number of batches
+    std::vector<float*> batch_images_test;
+    std::vector<int> batch_labels_test;
+    for (size_t batch = 0; batch < numBatches; ++batch) {
+
+        // Collect images and labels for the current batch
+        for (size_t i = 0; i < batchSize; ++i) {
+            size_t idx = batch * batchSize + i;
+            if (idx >= totalSamples) break;  // Avoid overflow for the last batch
+
+            const auto& img = train_h_images[idx];
+            const auto& label = train_labels[idx];
+
+            // Pre-process images
+            float* output = Augmentor.augment(img);
+            batch_images_test.push_back(output);
+            batch_labels_test.push_back(label);
+        }
+
+        // Ensure that the input buffer is properly prepared for the current batch
+        std::vector<float> hostInput(batchSize * imageSize);  // Buffer for batch input
+        for (size_t i = 0; i < batch_images_test.size(); ++i) {
+            std::copy(batch_images_test[i], batch_images_test[i] + imageSize, hostInput.begin() + i * imageSize);
+        }
+
+        // Forward pass for the current batch
+        auto logits = CNNModel.ForwardPass(hostInput.data(), batch_labels_test.data()); 
+
+        // Compute accuracy for the current batch
+        auto deviceAccuracy = CNNModel.ComputeAccuracy();  
+
+        // Copy batch accuracy from device to host
+        float batchAccuracy = 0.0f;
+        cudaMemcpy(&batchAccuracy, deviceAccuracy, sizeof(float), cudaMemcpyDeviceToHost);
+
+        accuracy += batchAccuracy;
+
+        // Free batch-specific memory if necessary (e.g., for augmented images)
+        batch_images_test.clear();
+        batch_labels_test.clear();
+        hostInput.assign(batchSize * imageSize, 0.0f);  
+
+    }
+
+    // Normalize by the total number of samples to get overall accuracy
+    accuracy /= totalSamples;
+
+    std::cout << "Overall Accuracy: " << accuracy * 100.0f << "%" << std::endl;
 
 
     // Cleanup
@@ -330,22 +395,3 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-
-
-
-            // // Assuming `deviceWeights` is a pointer to weights on GPU, and `numWeights` is the number of weights
-            // int numWeights = batchSize * numClass;
-            // float* hostWeights = (float*)malloc(numWeights * sizeof(float));
-
-            // // Copy the weights from GPU to CPU
-            // cudaMemcpy(hostWeights, logits, numWeights * sizeof(float), cudaMemcpyDeviceToHost);
-
-            // // Calculate the mean on the CPU
-            // float sum = 0.0f;
-            // for (int i = 0; i < numWeights; ++i) {
-            //     sum += hostWeights[i];
-            // }
-            // float mean = sum / numWeights;
-
-            // // Clean up
-            // free(hostWeights);

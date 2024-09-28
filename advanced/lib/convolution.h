@@ -8,6 +8,7 @@
 #include <nppi.h>
 #include <cudnn.h>
 #include <kernel.h>
+#include <cublas_v2.h>
 
 // Error checking macro for cuDNN calls
 #define CHECK_CUDNN(call) \
@@ -27,10 +28,20 @@
         }                                                                      \
     }
 
+#define CHECK_CUBLAS(call)                                                    \
+    {                                                                          \
+        cublasStatus_t status = call;                                        \
+        if (status != CUBLAS_STATUS_SUCCESS) {                               \
+            std::cerr << "CUBLAS error: " << status << " in " << __FILE__    \
+                      << " at line " << __LINE__ << std::endl;              \
+            exit(EXIT_FAILURE);                                             \
+        }                                                                      \
+    }
+
 class ConvolutionLayer {
 public:
     // Constructor
-    ConvolutionLayer(cudnnHandle_t cudnn,
+    ConvolutionLayer(cudnnHandle_t cudnn, cublasHandle_t cublas,
                     int inputHeight, int inputWidth,
                     int filterHeight, int filterWidth,
                     int strideHeight, int strideWidth,
@@ -56,6 +67,7 @@ private:
     int batchSize;
     float learningrate;
     cudnnHandle_t cudnn;
+    cublasHandle_t cublas;
 
     // Create tensor descriptors for input, output, and filters
     cudnnTensorDescriptor_t inputDesc, outputDesc, filterTensorDesc;

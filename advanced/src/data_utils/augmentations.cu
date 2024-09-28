@@ -59,7 +59,7 @@ float* ImageAugmentation::augment(float* h_image){
     normalize();
 
     // Copy NPP output from device to host (temporary storage)
-    cudaMemcpy(h_nppOutput, deviceInput, newWidth * newHeight * numChannels * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_nppOutput, deviceOutput, newWidth * newHeight * numChannels * sizeof(float), cudaMemcpyDeviceToHost);
 
     // Convert NPP output from HWC to CHW format
     convertHWCtoCHW(h_nppOutput, h_chwImage);

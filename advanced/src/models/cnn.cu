@@ -43,6 +43,9 @@ void CNN::AllocateMemory() {
     // Allocate memory for loss tensor
     CHECK_CUDA(cudaMalloc(&deviceLoss, sizeof(float)));
 
+    // Allocate memory for accuracy tensor
+    CHECK_CUDA(cudaMalloc(&deviceAccuracy, sizeof(float)));
+
     // Allocate memory for loss gradient tensor
     CHECK_CUDA(cudaMalloc(&deviceOutputGrad, batchSize * numClass * sizeof(float)));
 
@@ -62,7 +65,7 @@ void CNN::BuildModel() {
 
     // Build First CNN
     int cnnChannels1 = numFilter;
-    C1 = new ConvolutionLayer(cudnn, inputHeight, inputWidth, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels1, inputChannels, batchSize, learningrate);
+    C1 = new ConvolutionLayer(cudnn, cublas, inputHeight, inputWidth, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels1, inputChannels, batchSize, learningrate);
     auto[inputHeight2, inputWidth2] = CalculateDim(inputHeight, inputWidth);
 
     A1 = new ActivationLayer(cudnn, inputHeight2, inputWidth2, cnnChannels1, batchSize);
@@ -72,7 +75,7 @@ void CNN::BuildModel() {
 
     // Build Second CNN
     int cnnChannels2 = cnnChannels1 / 2;
-    C2 = new ConvolutionLayer(cudnn, inputHeight3, inputWidth3, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels2, inputChannels, batchSize, learningrate);
+    C2 = new ConvolutionLayer(cudnn, cublas, inputHeight3, inputWidth3, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels2, cnnChannels1, batchSize, learningrate);
     auto[inputHeight4, inputWidth4] = CalculateDim(inputHeight3, inputWidth3);
 
     A2 = new ActivationLayer(cudnn, inputHeight4, inputWidth4, cnnChannels2, batchSize);
@@ -82,7 +85,7 @@ void CNN::BuildModel() {
 
     // Build Third CNN
     int cnnChannels3 = cnnChannels2 / 2;
-    C3 = new ConvolutionLayer(cudnn, inputHeight5, inputWidth5, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels3, inputChannels, batchSize, learningrate);
+    C3 = new ConvolutionLayer(cudnn, cublas, inputHeight5, inputWidth5, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, cnnChannels3, cnnChannels2, batchSize, learningrate);
     auto[inputHeight6, inputWidth6] = CalculateDim(inputHeight5, inputWidth5);
 
     A3 = new ActivationLayer(cudnn, inputHeight6, inputWidth6, cnnChannels3, batchSize);
@@ -93,7 +96,7 @@ void CNN::BuildModel() {
 
     // Build First FC
     // flattenedSize = batchSize * outputHeight * outputWidth * outputChannels;
-    F4 = new FCLayer(cublas, outputHeight * outputWidth * outputChannels, hiddenDim, batchSize, learningrate);
+    F4 = new FCLayer(cublas, outputHeight * outputChannels * outputWidth, hiddenDim, batchSize, learningrate);
     A4 = new ActivationLayer(cudnn, 1, 1, hiddenDim, batchSize);
 
     // Build Second FC
@@ -107,6 +110,7 @@ void CNN::FreeMemory() {
     CHECK_CUDA(cudaFree(deviceInput));
     CHECK_CUDA(cudaFree(flattenedOutput));
     CHECK_CUDA(cudaFree(deviceLoss));
+    CHECK_CUDA(cudaFree(deviceAccuracy));
     CHECK_CUDA(cudaFree(deviceLabels));
     CHECK_CUDA(cudaFree(deviceOutputGrad));
 
@@ -146,25 +150,9 @@ float* CNN::ForwardPass(const float* hostInput, const int* hostLabels) {
 
     cnnOutput = P3Output;
 
-    // // Launch flattening kernel
-    // int blockSize = 256;  
-    // int gridSize = (flattenedSize + blockSize - 1) / blockSize;
-    // flatten_NCHW<<<gridSize, blockSize>>>(cnnOutput, flattenedOutput, batchSize, outputChannels, outputHeight, outputWidth);
-
-    // // Ensure the kernel is executed correctly
-    // cudaError_t err = cudaGetLastError();
-    // if (err != cudaSuccess) {
-    //     std::cerr << "CUDA error: " << cudaGetErrorString(err)
-    //             << " in File " << __FILE__
-    //             << " in line " << __LINE__
-    //             << std::endl;
-    //     exit(EXIT_FAILURE);
-    // }
-
     // FC
     // FCs are implemented using cuBLAS, so all amtrices have to be stored in column major order. 
-    // flatten_NCHW stores the cnn output in row major order so we'll use the transpose of matrices. 
-    auto F4Output = F4->ForwardPass(P3Output);
+    auto F4Output = F4->ForwardPass(cnnOutput);
     auto A4Output = A4->ForwardPass(F4Output);
     auto F5Output = F5->ForwardPass(A4Output);
 
@@ -202,11 +190,10 @@ void CNN::BackwardPass() {
 float* CNN::ComputeLoss() {
 
     CHECK_CUDA(cudaMemset(deviceLoss, 0.0f, sizeof(float)));
-
     
     // Call a kernel to compute cross-entropy loss
     int blockSize = 256;  // You can tune this
-    int gridSize = (flattenedSize + blockSize - 1) / blockSize;
+    int gridSize = (batchSize + blockSize - 1) / blockSize;
 
     cross_entropy_loss_with_logits<<<gridSize, blockSize>>>(fcLogits, deviceLabels, deviceLoss, numClass, batchSize);
 
@@ -227,6 +214,31 @@ float* CNN::ComputeLoss() {
     return deviceLoss;
 }
 
+
+float* CNN::ComputeAccuracy() {
+
+    CHECK_CUDA(cudaMemset(deviceAccuracy, 0.0f, sizeof(float)));
+
+    // Call a kernel to compute cross-entropy loss
+    int blockSize = 256;  // You can tune this
+    int gridSize = (batchSize + blockSize - 1) / blockSize;
+
+    calculate_accuracy<<<gridSize, blockSize>>>(fcLogits, deviceLabels, deviceAccuracy, numClass, batchSize);
+
+    // Ensure the kernel is executed correctly
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        std::cerr << "CUDA error: " << cudaGetErrorString(err)
+                << " in File " << __FILE__
+                << " in line " << __LINE__
+                << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    cudaDeviceSynchronize();
+
+    return deviceAccuracy;
+}
 
 // Get output from device to host
 std::tuple<int, int, float*> CNN::GetOutput(int index) {

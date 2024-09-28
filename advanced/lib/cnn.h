@@ -51,6 +51,8 @@ public:
 
     float* ComputeLoss();
 
+    float* ComputeAccuracy();
+
     void BackwardPass();
 
     // Setters and Getters for parameters
@@ -85,10 +87,12 @@ private:
     FCLayer* F4 = nullptr;
     ActivationLayer* A4 = nullptr;
     FCLayer* F5 = nullptr;
+    ConvolutionLayer* C4 = nullptr;
 
     float* deviceInput;
     float* deviceLoss;
     int* deviceLabels;
+    float* deviceAccuracy;
 
     float* cnnOutput;
     float* flattenedOutput;
