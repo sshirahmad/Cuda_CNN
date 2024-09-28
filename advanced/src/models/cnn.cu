@@ -249,13 +249,21 @@ std::tuple<int, int, float*> CNN::GetOutput(int index) {
 
 
 void CNN::SaveModelWeights(const std::string& filename) {
+    // Open the file in binary mode
+    FILE* file = fopen(filename.c_str(), "wb");
+    if (!file) {
+        std::cerr << "Failed to open file for saving weights: " << filename << std::endl;
+        return;
+    }
 
-    C1->SaveWeights(filename);
-    C2->SaveWeights(filename);
-    C3->SaveWeights(filename);
-    F4->SaveWeightsAndBiases(filename);
-    F5->SaveWeightsAndBiases(filename);
+    C1->SaveWeights(file);
+    C2->SaveWeights(file);
+    C3->SaveWeights(file);
+    F4->SaveWeightsAndBiases(file);
+    F5->SaveWeightsAndBiases(file);
 
+    // Close the file after all layers have been saved
+    fclose(file);
     std::cout << "Model weights saved to " << filename << std::endl;
 
 }
@@ -263,13 +271,21 @@ void CNN::SaveModelWeights(const std::string& filename) {
 
 
 void CNN::LoadModelWeights(const std::string& filename) {
+    // Open the file once in binary mode
+    FILE* file = fopen(filename.c_str(), "rb");
+    if (!file) {
+        std::cerr << "Failed to open file for loading weights: " << filename << std::endl;
+        return;
+    }
 
-    C1->LoadWeights(filename);
-    C2->LoadWeights(filename);
-    C3->LoadWeights(filename);
-    F4->LoadWeightsAndBiases(filename);
-    F5->LoadWeightsAndBiases(filename);
+    C1->LoadWeights(file);
+    C2->LoadWeights(file);
+    C3->LoadWeights(file);
+    F4->LoadWeightsAndBiases(file);
+    F5->LoadWeightsAndBiases(file);
 
+    // Close the file after loading all layers
+    fclose(file);
     std::cout << "Model weights loaded from " << filename << std::endl;
 
 }

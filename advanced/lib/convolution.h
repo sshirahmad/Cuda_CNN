@@ -58,9 +58,9 @@ public:
 
     float* BackwardPass(const float* deviceOutputGrad);
 
-    void SaveWeights(const std::string& filename);
+    void SaveWeights(FILE* file);
 
-    void LoadWeights(const std::string& filename);
+    void LoadWeights(FILE* file);
 
 private:
     int inputHeight, inputWidth;

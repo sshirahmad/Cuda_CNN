@@ -195,12 +195,10 @@ void ConvolutionLayer::SetFilters() {
 }
 
 
-void ConvolutionLayer::SaveWeights(const std::string& filename) {
+void ConvolutionLayer::SaveWeights(FILE* file) {
 
-    // Open a file to save the weights (binary mode)
-    FILE* file = fopen(filename.c_str(), "wb");
     if (!file) {
-        std::cerr << "Failed to open file for saving weights: " << filename << std::endl;
+        std::cerr << "Invalid file pointer for loading convolutional weights." << std::endl;
         return;
     }
 
@@ -222,20 +220,14 @@ void ConvolutionLayer::SaveWeights(const std::string& filename) {
     // Write the weights to the file
     fwrite(hostFilter.data(), sizeof(float), filter_num_elements, file);
 
-    // Close the file
-    fclose(file);
-
-    std::cout << "Convolution layer weights saved to " << filename << std::endl;
 }
 
 
 
-void ConvolutionLayer::LoadWeights(const std::string& filename) {
+void ConvolutionLayer::LoadWeights(FILE* file) {
 
-    // Open the file in binary mode
-    FILE* file = fopen(filename.c_str(), "rb");
     if (!file) {
-        std::cerr << "Failed to open file for loading weights: " << filename << std::endl;
+        std::cerr << "Invalid file pointer for loading convolutional weights." << std::endl;
         return;
     }
 
@@ -263,13 +255,9 @@ void ConvolutionLayer::LoadWeights(const std::string& filename) {
     // Read the weights from the file
     fread(hostFilter.data(), sizeof(float), filter_num_elements, file);
 
-    // Close the file
-    fclose(file);
-
     // Copy the weights from host (CPU) to device (GPU)
     CHECK_CUDA(cudaMemcpy(deviceFilter, hostFilter.data(), filter_num_elements * sizeof(float), cudaMemcpyHostToDevice));
 
-    std::cout << "Convolution layer weights loaded from " << filename << std::endl;
 }
 
 

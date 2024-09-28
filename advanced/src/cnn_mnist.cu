@@ -102,7 +102,7 @@ Arguments parseArguments(int argc, char* argv[]) {
     Arguments args = {
         "../data/", // directory
         "./output/weights/", // Save directory
-        "./output/weights/weights_199.bin", // Load directory
+        "./output/weights/weights_200.bin", // Load directory
         28,                          // dstWidth
         28,                          // dstHeight
         3,                            // filterHeight
@@ -458,8 +458,17 @@ void train(std::vector<float*> train_h_images, std::vector<int> train_labels, st
         }
 
         // save weights every ten epochs
-        if (e % 10 == 0){
-            std::string filename = save_directory + "weights_" + std::to_string(e) + ".bin";
+        if (e % 10 == 9){
+            // Create a directory
+            std::filesystem::path dirPath(save_directory);
+            
+            if (std::filesystem::create_directory(dirPath)) {
+                std::cout << "Directory created: " << save_directory << std::endl;
+            } else {
+                std::cout << "Directory already exists or failed to create: " << save_directory << std::endl;
+            }
+
+            std::string filename = save_directory + "weights_" + std::to_string(e + 1) + ".bin";
             CNNModel.SaveModelWeights(filename);
 
         }

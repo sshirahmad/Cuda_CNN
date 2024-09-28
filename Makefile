@@ -47,12 +47,12 @@ $(TARGET): $(SRC)
 
 # Rule for running the application
 run: $(TARGET)
-	$(TARGET) -d "../data/" -w 28 -h 28
+	$(TARGET) -d "../data/" -w 28 -h 28 > ./output/output_log.txt
 
 
 # Clean up
 clean:
-	rm -f $(BIN_DIR)/* $(OUTPUT_DIR)/* ./output_log.txt
+	rm -rf $(BIN_DIR)/* $(OUTPUT_DIR)/* 
 
 # Installation rule (not much to install, but here for completeness)
 install:

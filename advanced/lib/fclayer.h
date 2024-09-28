@@ -37,9 +37,9 @@ public:
     float* ForwardPass(const float* deviceInput);
     float* BackwardPass(const float* deviceOutputGrad);
 
-    void SaveWeightsAndBiases(const std::string& filename);
+    void SaveWeightsAndBiases(FILE* file);
 
-    void LoadWeightsAndBiases(const std::string& filename);
+    void LoadWeightsAndBiases(FILE* file);
 
 private:
     cublasHandle_t cublasHandle;

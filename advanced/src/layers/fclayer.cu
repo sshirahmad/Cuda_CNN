@@ -171,11 +171,10 @@ void FCLayer::InitializeWeights() {
 }
 
 
-void FCLayer::SaveWeightsAndBiases(const std::string& filename) {
-    // Open file in binary mode
-    FILE* file = fopen(filename.c_str(), "wb");
+void FCLayer::SaveWeightsAndBiases(FILE* file) {
+
     if (!file) {
-        std::cerr << "Failed to open file for saving weights and biases: " << filename << std::endl;
+        std::cerr << "Invalid file pointer for loading convolutional weights." << std::endl;
         return;
     }
 
@@ -197,17 +196,13 @@ void FCLayer::SaveWeightsAndBiases(const std::string& filename) {
     // Write biases to file
     fwrite(hostBias.data(), sizeof(float), outputSize, file);
 
-    // Close file
-    fclose(file);
-    std::cout << "Fully-connected layer weights and biases saved to " << filename << std::endl;
 }
 
 
-void FCLayer::LoadWeightsAndBiases(const std::string& filename) {
-    // Open file in binary mode
-    FILE* file = fopen(filename.c_str(), "rb");
+void FCLayer::LoadWeightsAndBiases(FILE* file) {
+
     if (!file) {
-        std::cerr << "Failed to open file for loading weights and biases: " << filename << std::endl;
+        std::cerr << "Invalid file pointer for loading convolutional weights." << std::endl;
         return;
     }
 
@@ -237,7 +232,4 @@ void FCLayer::LoadWeightsAndBiases(const std::string& filename) {
     CHECK_CUDA(cudaMemcpy(deviceWeight, hostWeights.data(), inputSize * outputSize * sizeof(float), cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(deviceBias, hostBias.data(), outputSize * sizeof(float), cudaMemcpyHostToDevice));
 
-    // Close file
-    fclose(file);
-    std::cout << "Fully-connected layer weights and biases loaded from " << filename << std::endl;
 }
