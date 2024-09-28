@@ -37,9 +37,6 @@ void CNN::AllocateMemory() {
 
     CHECK_CUDA(cudaMalloc(&deviceLabels, batchSize * sizeof(int)));
 
-    // Allocate memory for flattened cnn output tensor
-    CHECK_CUDA(cudaMalloc(&flattenedOutput, flattenedSize * sizeof(float)));
-
     // Allocate memory for loss tensor
     CHECK_CUDA(cudaMalloc(&deviceLoss, sizeof(float)));
 
@@ -108,7 +105,6 @@ void CNN::BuildModel() {
 void CNN::FreeMemory() {
     // Free intermediate buffers
     CHECK_CUDA(cudaFree(deviceInput));
-    CHECK_CUDA(cudaFree(flattenedOutput));
     CHECK_CUDA(cudaFree(deviceLoss));
     CHECK_CUDA(cudaFree(deviceAccuracy));
     CHECK_CUDA(cudaFree(deviceLabels));
@@ -250,4 +246,31 @@ std::tuple<int, int, float*> CNN::GetOutput(int index) {
 
 }
 
+
+
+void CNN::SaveModelWeights(const std::string& filename) {
+
+    C1->SaveWeights(filename);
+    C2->SaveWeights(filename);
+    C3->SaveWeights(filename);
+    F4->SaveWeightsAndBiases(filename);
+    F5->SaveWeightsAndBiases(filename);
+
+    std::cout << "Model weights saved to " << filename << std::endl;
+
+}
+
+
+
+void CNN::LoadModelWeights(const std::string& filename) {
+
+    C1->LoadWeights(filename);
+    C2->LoadWeights(filename);
+    C3->LoadWeights(filename);
+    F4->LoadWeightsAndBiases(filename);
+    F5->LoadWeightsAndBiases(filename);
+
+    std::cout << "Model weights loaded from " << filename << std::endl;
+
+}
 

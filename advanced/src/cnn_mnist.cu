@@ -76,11 +76,49 @@ std::vector<int> readLabelsFromCSV(const std::string& fileName) {
 }
 
 
-std::tuple<std::string, int, int> parseArguments(int argc, char* argv[]) {
+struct Arguments {
+    std::string directory;
+    std::string save_directory;
+    std::string load_directory;
+    int dstWidth;
+    int dstHeight;
+    int filterHeight;
+    int filterWidth;
+    int strideHeight;
+    int strideWidth;
+    int paddingHeight;
+    int paddingWidth;
+    int numFilters;
+    int hiddenDim;
+    int numClass;
+    int batchSize;
+    float learningRate;
+    bool debug;
+    int epochs;
+};
+
+Arguments parseArguments(int argc, char* argv[]) {
     // Initialize default values
-    std::string directory = "../data/train/mnist_images";
-    int dstWidth = 320;
-    int dstHeight = 240;
+    Arguments args = {
+        "../data/", // directory
+        "./output/weights/", // Save directory
+        "./output/weights/weights_199.bin", // Load directory
+        28,                          // dstWidth
+        28,                          // dstHeight
+        3,                            // filterHeight
+        3,                            // filterWidth
+        1,                            // strideHeight
+        1,                            // strideWidth
+        1,                            // paddingHeight
+        1,                            // paddingWidth
+        64,                           // numFilters
+        64,                           // hiddenDim
+        10,                           // numClass
+        128,                          // batchSize
+        0.0001f,                     // learningRate
+        false,                       // debug
+        200                         // epochs
+    };
 
     // Iterate through command-line arguments
     for (int i = 1; i < argc; ++i) {
@@ -88,13 +126,23 @@ std::tuple<std::string, int, int> parseArguments(int argc, char* argv[]) {
 
         // Check for the directory flag
         if (arg == "-d" && i + 1 < argc) {
-            directory = argv[++i];
+            args.directory = argv[++i];
+        }
+
+        // Check for the save directory flag
+        else if (arg == "-ds" && i + 1 < argc) {
+            args.save_directory = argv[++i];
+        }
+
+        // Check for the load directory flag
+        else if (arg == "-dl" && i + 1 < argc) {
+            args.load_directory = argv[++i];
         }
 
         // Check for the width flag
         else if (arg == "-w" && i + 1 < argc) {
             try {
-                dstWidth = std::stoi(argv[++i]);
+                args.dstWidth = std::stoi(argv[++i]);
             } catch (const std::invalid_argument& e) {
                 std::cerr << "Invalid width value provided. Using default value 320." << std::endl;
             }
@@ -102,19 +150,134 @@ std::tuple<std::string, int, int> parseArguments(int argc, char* argv[]) {
         // Check for the height flag
         else if (arg == "-h" && i + 1 < argc) {
             try {
-                dstHeight = std::stoi(argv[++i]);
+                args.dstHeight = std::stoi(argv[++i]);
             } catch (const std::invalid_argument& e) {
                 std::cerr << "Invalid height value provided. Using default value 240." << std::endl;
             }
         }
+        // Check for filter height
+        else if (arg == "-fh" && i + 1 < argc) {
+            try {
+                args.filterHeight = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid filter height value provided. Using default value 3." << std::endl;
+            }
+        }
+        // Check for filter width
+        else if (arg == "-fw" && i + 1 < argc) {
+            try {
+                args.filterWidth = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid filter width value provided. Using default value 3." << std::endl;
+            }
+        }
+        // Check for stride height
+        else if (arg == "-sh" && i + 1 < argc) {
+            try {
+                args.strideHeight = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid stride height value provided. Using default value 1." << std::endl;
+            }
+        }
+        // Check for stride width
+        else if (arg == "-sw" && i + 1 < argc) {
+            try {
+                args.strideWidth = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid stride width value provided. Using default value 1." << std::endl;
+            }
+        }
+        // Check for padding height
+        else if (arg == "-ph" && i + 1 < argc) {
+            try {
+                args.paddingHeight = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid padding height value provided. Using default value 1." << std::endl;
+            }
+        }
+        // Check for padding width
+        else if (arg == "-pw" && i + 1 < argc) {
+            try {
+                args.paddingWidth = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid padding width value provided. Using default value 1." << std::endl;
+            }
+        }
+        // Check for number of filters
+        else if (arg == "-nf" && i + 1 < argc) {
+            try {
+                args.numFilters = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid number of filters provided. Using default value 64." << std::endl;
+            }
+        }
+        // Check for hidden dimension
+        else if (arg == "-hd" && i + 1 < argc) {
+            try {
+                args.hiddenDim = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid hidden dimension value provided. Using default value 64." << std::endl;
+            }
+        }
+        // Check for number of classes
+        else if (arg == "-nc" && i + 1 < argc) {
+            try {
+                args.numClass = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid number of classes provided. Using default value 10." << std::endl;
+            }
+        }
+        // Check for batch size
+        else if (arg == "-bs" && i + 1 < argc) {
+            try {
+                args.batchSize = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid batch size value provided. Using default value 128." << std::endl;
+            }
+        }
+        // Check for learning rate
+        else if (arg == "-lr" && i + 1 < argc) {
+            try {
+                args.learningRate = std::stof(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid learning rate value provided. Using default value 0.0001." << std::endl;
+            }
+        }
+        // Check for debug flag
+        else if (arg == "-debug") {
+            args.debug = true;
+        }
+        // Check for epochs
+        else if (arg == "-e" && i + 1 < argc) {
+            try {
+                args.epochs = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid epochs value provided. Using default value 100." << std::endl;
+            }
+        }
     }
 
-    std::cout << "Data Path: " << directory << std::endl;
-    std::cout << "Width: " << dstWidth << std::endl;
-    std::cout << "Height: " << dstHeight << std::endl;
+    // Print all parameters
+    std::cout << "Data Path: " << args.directory << std::endl;
+    std::cout << "Save Path: " << args.save_directory << std::endl;
+    std::cout << "Load Path: " << args.load_directory << std::endl;
+    std::cout << "Width: " << args.dstWidth << std::endl;
+    std::cout << "Height: " << args.dstHeight << std::endl;
+    std::cout << "Filter Height: " << args.filterHeight << std::endl;
+    std::cout << "Filter Width: " << args.filterWidth << std::endl;
+    std::cout << "Stride Height: " << args.strideHeight << std::endl;
+    std::cout << "Stride Width: " << args.strideWidth << std::endl;
+    std::cout << "Padding Height: " << args.paddingHeight << std::endl;
+    std::cout << "Padding Width: " << args.paddingWidth << std::endl;
+    std::cout << "Number of Filters: " << args.numFilters << std::endl;
+    std::cout << "Hidden Dimension: " << args.hiddenDim << std::endl;
+    std::cout << "Number of Classes: " << args.numClass << std::endl;
+    std::cout << "Batch Size: " << args.batchSize << std::endl;
+    std::cout << "Learning Rate: " << args.learningRate << std::endl;
+    std::cout << "Debug Mode: " << (args.debug ? "Enabled" : "Disabled") << std::endl;
+    std::cout << "Epochs: " << args.epochs << std::endl;
 
-
-    return {directory, dstWidth, dstHeight};
+    return args;
 }
 
 
@@ -190,43 +353,9 @@ void printProgressBar(int current, int total, int barWidth = 50) {
 }
 
 
-int main(int argc, char* argv[]) {
 
-    // Initialize CUDA and cuDNN and cuBLAS
-    cudnnHandle_t cudnn;
-    cublasHandle_t cublas;
-
-    cudnnCreate(&cudnn);
-    cublasCreate(&cublas);
-
-    auto[directory, dstWidth, dstHeight] = parseArguments(argc, argv);
-    
-    // Read train images and labels
-    std::string train_image_directory = directory + "train/mnist_images";
-    std::string train_label_directory =  directory + "train/mnist_labels.csv";
-    std::string test_image_directory = directory + "test/mnist_images";
-    std::string test_label_directory =  directory + "test/mnist_labels.csv";
-    auto[train_h_images, srcWidth, srcHeight, numChannels, train_filenames] = read_images(train_image_directory);
-    auto train_labels = readLabelsFromCSV(train_label_directory);
-    auto[test_h_images, tsrcWidth, tsrcHeight, tnumChannels, test_filenames] = read_images(test_image_directory);
-    auto test_labels = readLabelsFromCSV(test_label_directory);
-
-    // Initialize convolution paramters
-    int filterHeight = 3, filterWidth = 3; 
-    int strideHeight = 1, strideWidth = 1;
-    int paddingHeight = 1, paddingWidth = 1;
-    int numFilters = 64;
-    int hiddenDim = 64, numClass = 10;
-    int batchSize = 128;
-    float learningrate = 0.0001;
-    bool debug = false;
-    int epochs = 100;
-
-    // Construct the augmentor
-    ImageAugmentation Augmentor(srcWidth, srcHeight, dstWidth, dstHeight, numChannels);
-
-    // Construct the network
-    CNN CNNModel(cudnn, cublas, dstHeight, dstWidth, filterHeight, filterWidth, strideHeight, strideWidth, paddingHeight, paddingWidth, numFilters, numChannels, hiddenDim, numClass, batchSize, learningrate);
+void train(std::vector<float*> train_h_images, std::vector<int> train_labels, std::vector<std::string> train_filenames, CNN& CNNModel, ImageAugmentation& Augmentor,
+             int numChannels, int dstHeight, int dstWidth, int epochs, int batchSize, int numClass, bool debug, std::string save_directory){
 
     //////////////////////// TRAINING ////////////////////////
 
@@ -314,10 +443,10 @@ int main(int argc, char* argv[]) {
                     }
 
                     // Save output images
-                    // for (size_t j = 0; j < batch_images.size(); ++j) {
-                    //     auto [outputWidth, outputHeight, outputImage] = CNNModel.GetOutput(j);  
-                    //     save_image(outputWidth, outputHeight, outputImage, 1, batch_filenames[j]);
-                    // }
+                    for (size_t j = 0; j < batch_images.size(); ++j) {
+                        auto [outputWidth, outputHeight, outputImage] = CNNModel.GetOutput(j);  
+                        save_image(outputWidth, outputHeight, outputImage, 1, batch_filenames[j]);
+                    }
                 }
 
                 // Clear the batch
@@ -328,6 +457,13 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // save weights every ten epochs
+        if (e % 10 == 0){
+            std::string filename = save_directory + "weights_" + std::to_string(e) + ".bin";
+            CNNModel.SaveModelWeights(filename);
+
+        }
+
         // Average the loss over the batches
         lossPerEpoch[e] = epochLoss / (train_h_images.size() / batchSize);
 
@@ -335,13 +471,23 @@ int main(int argc, char* argv[]) {
         std::cout << std::endl << "Epoch " << e + 1 << " completed. Loss: " << lossPerEpoch[e] << std::endl << std::endl;
     }
 
+}
+
+
+float test(std::vector<float*> test_h_images, std::vector<int> test_labels, CNN& CNNModel, ImageAugmentation& Augmentor,
+            int numChannels, int dstHeight, int dstWidth, int batchSize, std::string load_directory){
 
     //////////////////////// TEST ////////////////////////
+    // Load model weights 
+    CNNModel.LoadModelWeights(load_directory);
+
     float accuracy = 0.0f;
-    size_t totalSamples = train_h_images.size();
+    int imageSize = numChannels * dstHeight * dstWidth;
+    size_t totalSamples = test_h_images.size();
     size_t numBatches = (totalSamples + batchSize - 1) / batchSize;  // Calculate number of batches
     std::vector<float*> batch_images_test;
     std::vector<int> batch_labels_test;
+    std::vector<float> hostInput(batchSize * imageSize);  // Buffer for batch input
     for (size_t batch = 0; batch < numBatches; ++batch) {
 
         // Collect images and labels for the current batch
@@ -349,8 +495,8 @@ int main(int argc, char* argv[]) {
             size_t idx = batch * batchSize + i;
             if (idx >= totalSamples) break;  // Avoid overflow for the last batch
 
-            const auto& img = train_h_images[idx];
-            const auto& label = train_labels[idx];
+            const auto& img = test_h_images[idx];
+            const auto& label = test_labels[idx];
 
             // Pre-process images
             float* output = Augmentor.augment(img);
@@ -359,7 +505,6 @@ int main(int argc, char* argv[]) {
         }
 
         // Ensure that the input buffer is properly prepared for the current batch
-        std::vector<float> hostInput(batchSize * imageSize);  // Buffer for batch input
         for (size_t i = 0; i < batch_images_test.size(); ++i) {
             std::copy(batch_images_test[i], batch_images_test[i] + imageSize, hostInput.begin() + i * imageSize);
         }
@@ -388,6 +533,49 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Overall Accuracy: " << accuracy * 100.0f << "%" << std::endl;
 
+    return accuracy;
+
+}
+
+
+int main(int argc, char* argv[]) {
+
+    // Initialize CUDA and cuDNN and cuBLAS
+    cudnnHandle_t cudnn;
+    cublasHandle_t cublas;
+
+    cudnnCreate(&cudnn);
+    cublasCreate(&cublas);
+
+    Arguments args = parseArguments(argc, argv);
+    
+    // Read train and test images and labels
+    std::string train_image_directory = args.directory + "train/mnist_images";
+    std::string train_label_directory =  args.directory + "train/mnist_labels.csv";
+    std::string test_image_directory = args.directory + "test/mnist_images";
+    std::string test_label_directory =  args.directory + "test/mnist_labels.csv";
+    auto[train_h_images, srcWidth, srcHeight, numChannels, train_filenames] = read_images(train_image_directory);
+    auto train_labels = readLabelsFromCSV(train_label_directory);
+    auto[test_h_images, tsrcWidth, tsrcHeight, tnumChannels, test_filenames] = read_images(test_image_directory);
+    auto test_labels = readLabelsFromCSV(test_label_directory);
+
+    // Construct the augmentor
+    ImageAugmentation Augmentor(srcWidth, srcHeight, args.dstWidth, args.dstHeight, numChannels);
+
+    // Construct the network
+    CNN CNNModel(cudnn, cublas, args.dstHeight, args.dstWidth,
+                args.filterHeight, args.filterWidth,
+                args.strideHeight, args.strideWidth,
+                args.paddingHeight, args.paddingWidth,
+                args.numFilters, numChannels,
+                args.hiddenDim, args.numClass,
+                args.batchSize, args.learningRate);
+
+    // Train the model
+    train(train_h_images, train_labels, train_filenames, CNNModel, Augmentor, numChannels, args.dstHeight, args.dstWidth, args.epochs, args.batchSize, args.numClass, args.debug, args.save_directory);
+
+    // Test the model
+    auto accuracy = test(test_h_images, test_labels, CNNModel, Augmentor, numChannels, args.dstHeight, args.dstWidth, args.batchSize, args.load_directory);
 
     // Cleanup
     cudnnDestroy(cudnn);

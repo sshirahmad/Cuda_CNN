@@ -5,7 +5,6 @@ OUTPUT_DIR = ./output
 DATA_DIR = ./data
 LIB_DIR = ./advanced/lib
 
-
 # Define the compiler and flags
 NVCC = "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5/bin/nvcc.exe"
 
@@ -50,9 +49,10 @@ $(TARGET): $(SRC)
 run: $(TARGET)
 	$(TARGET) -d "../data/" -w 28 -h 28
 
+
 # Clean up
 clean:
-	rm -f $(BIN_DIR)/* $(OUTPUT_DIR)/*
+	rm -f $(BIN_DIR)/* $(OUTPUT_DIR)/* ./output_log.txt
 
 # Installation rule (not much to install, but here for completeness)
 install:

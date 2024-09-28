@@ -194,3 +194,82 @@ void ConvolutionLayer::SetFilters() {
 
 }
 
+
+void ConvolutionLayer::SaveWeights(const std::string& filename) {
+
+    // Open a file to save the weights (binary mode)
+    FILE* file = fopen(filename.c_str(), "wb");
+    if (!file) {
+        std::cerr << "Failed to open file for saving weights: " << filename << std::endl;
+        return;
+    }
+
+    // Save layer dimensions (input size, output size)
+    fwrite(&inputChannels, sizeof(int), 1, file);
+    fwrite(&outputChannels, sizeof(int), 1, file);
+    fwrite(&filterHeight, sizeof(int), 1, file);
+    fwrite(&filterWidth, sizeof(int), 1, file);
+
+    // Determine the size of the weights
+    int filter_num_elements = outputChannels * inputChannels * filterHeight * filterWidth;
+    
+    // Allocate memory on the host (CPU) to store the weights
+    std::vector<float> hostFilter(filter_num_elements);
+
+    // Copy weights from device (GPU) to host (CPU)
+    CHECK_CUDA(cudaMemcpy(hostFilter.data(), deviceFilter, filter_num_elements * sizeof(float), cudaMemcpyDeviceToHost));
+
+    // Write the weights to the file
+    fwrite(hostFilter.data(), sizeof(float), filter_num_elements, file);
+
+    // Close the file
+    fclose(file);
+
+    std::cout << "Convolution layer weights saved to " << filename << std::endl;
+}
+
+
+
+void ConvolutionLayer::LoadWeights(const std::string& filename) {
+
+    // Open the file in binary mode
+    FILE* file = fopen(filename.c_str(), "rb");
+    if (!file) {
+        std::cerr << "Failed to open file for loading weights: " << filename << std::endl;
+        return;
+    }
+
+
+    // Read layer dimensions (input size, output size)
+    int loadedInputChannels, loadedOutputChannels, loadedFilterHeight, loadedFilterWidth;
+    fread(&loadedInputChannels, sizeof(int), 1, file);
+    fread(&loadedOutputChannels, sizeof(int), 1, file);
+    fread(&loadedFilterHeight, sizeof(int), 1, file);
+    fread(&loadedFilterWidth, sizeof(int), 1, file);
+
+    // Ensure that dimensions match
+    if (loadedInputChannels != inputChannels || loadedOutputChannels != outputChannels || loadedFilterHeight != filterHeight || loadedFilterWidth != filterWidth) {
+        std::cerr << "Layer dimensions mismatch while loading weights and biases!" << std::endl;
+        fclose(file);
+        return;
+    }
+
+    // Determine the size of the weights
+    int filter_num_elements = outputChannels * inputChannels * filterHeight * filterWidth;
+
+    // Allocate memory on the host (CPU) to store the weights
+    std::vector<float> hostFilter(filter_num_elements);
+
+    // Read the weights from the file
+    fread(hostFilter.data(), sizeof(float), filter_num_elements, file);
+
+    // Close the file
+    fclose(file);
+
+    // Copy the weights from host (CPU) to device (GPU)
+    CHECK_CUDA(cudaMemcpy(deviceFilter, hostFilter.data(), filter_num_elements * sizeof(float), cudaMemcpyHostToDevice));
+
+    std::cout << "Convolution layer weights loaded from " << filename << std::endl;
+}
+
+

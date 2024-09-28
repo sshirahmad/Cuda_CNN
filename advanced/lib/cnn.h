@@ -55,6 +55,10 @@ public:
 
     void BackwardPass();
 
+    void SaveModelWeights(const std::string& filename); 
+
+    void LoadModelWeights(const std::string& filename);
+
     // Setters and Getters for parameters
     std::tuple<int, int, float*> GetOutput(int index);
 
@@ -87,7 +91,6 @@ private:
     FCLayer* F4 = nullptr;
     ActivationLayer* A4 = nullptr;
     FCLayer* F5 = nullptr;
-    ConvolutionLayer* C4 = nullptr;
 
     float* deviceInput;
     float* deviceLoss;
@@ -95,13 +98,11 @@ private:
     float* deviceAccuracy;
 
     float* cnnOutput;
-    float* flattenedOutput;
     float* fcLogits;
     float* deviceOutputGrad;
 
     void AllocateMemory();
     void FreeMemory();
-    void UpdateFilters();
     void BuildModel();
     std::tuple<int, int> CalculateDim(int inHeight, int inWidth);
 

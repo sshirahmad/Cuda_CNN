@@ -9,6 +9,7 @@
 #include <cudnn.h>
 #include <kernel.h>
 #include <cublas_v2.h>
+#include <vector>
 
 // Error checking macro for cuDNN calls
 #define CHECK_CUDNN(call) \
@@ -56,6 +57,10 @@ public:
     float* ForwardPass(const float* deviceInput);
 
     float* BackwardPass(const float* deviceOutputGrad);
+
+    void SaveWeights(const std::string& filename);
+
+    void LoadWeights(const std::string& filename);
 
 private:
     int inputHeight, inputWidth;

@@ -169,3 +169,75 @@ void FCLayer::InitializeWeights() {
     cudaDeviceSynchronize();
 
 }
+
+
+void FCLayer::SaveWeightsAndBiases(const std::string& filename) {
+    // Open file in binary mode
+    FILE* file = fopen(filename.c_str(), "wb");
+    if (!file) {
+        std::cerr << "Failed to open file for saving weights and biases: " << filename << std::endl;
+        return;
+    }
+
+    // Save layer dimensions (input size, output size)
+    fwrite(&inputSize, sizeof(int), 1, file);
+    fwrite(&outputSize, sizeof(int), 1, file);
+
+    // Allocate host memory for weights and biases
+    std::vector<float> hostWeights(inputSize * outputSize);
+    std::vector<float> hostBias(outputSize);
+
+    // Copy data from device (GPU) to host (CPU)
+    CHECK_CUDA(cudaMemcpy(hostWeights.data(), deviceWeight, inputSize * outputSize * sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(hostBias.data(), deviceBias, outputSize * sizeof(float), cudaMemcpyDeviceToHost));
+
+    // Write weights to file
+    fwrite(hostWeights.data(), sizeof(float), inputSize * outputSize, file);
+
+    // Write biases to file
+    fwrite(hostBias.data(), sizeof(float), outputSize, file);
+
+    // Close file
+    fclose(file);
+    std::cout << "Fully-connected layer weights and biases saved to " << filename << std::endl;
+}
+
+
+void FCLayer::LoadWeightsAndBiases(const std::string& filename) {
+    // Open file in binary mode
+    FILE* file = fopen(filename.c_str(), "rb");
+    if (!file) {
+        std::cerr << "Failed to open file for loading weights and biases: " << filename << std::endl;
+        return;
+    }
+
+    // Read layer dimensions (input size, output size)
+    int loadedInputSize, loadedOutputSize;
+    fread(&loadedInputSize, sizeof(int), 1, file);
+    fread(&loadedOutputSize, sizeof(int), 1, file);
+
+    // Ensure that dimensions match
+    if (loadedInputSize != inputSize || loadedOutputSize != outputSize) {
+        std::cerr << "Layer dimensions mismatch while loading weights and biases!" << std::endl;
+        fclose(file);
+        return;
+    }
+
+    // Allocate host memory for weights and biases
+    std::vector<float> hostWeights(inputSize * outputSize);
+    std::vector<float> hostBias(outputSize);
+
+    // Read weights from file
+    fread(hostWeights.data(), sizeof(float), inputSize * outputSize, file);
+
+    // Read biases from file
+    fread(hostBias.data(), sizeof(float), outputSize, file);
+
+    // Copy data from host (CPU) to device (GPU)
+    CHECK_CUDA(cudaMemcpy(deviceWeight, hostWeights.data(), inputSize * outputSize * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(deviceBias, hostBias.data(), outputSize * sizeof(float), cudaMemcpyHostToDevice));
+
+    // Close file
+    fclose(file);
+    std::cout << "Fully-connected layer weights and biases loaded from " << filename << std::endl;
+}

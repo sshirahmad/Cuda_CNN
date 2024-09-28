@@ -6,6 +6,7 @@
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 #include <kernel.h>
+#include <vector>
 
 #define CHECK_CUDA(call)                                                       \
     {                                                                          \
@@ -35,6 +36,10 @@ public:
 
     float* ForwardPass(const float* deviceInput);
     float* BackwardPass(const float* deviceOutputGrad);
+
+    void SaveWeightsAndBiases(const std::string& filename);
+
+    void LoadWeightsAndBiases(const std::string& filename);
 
 private:
     cublasHandle_t cublasHandle;
