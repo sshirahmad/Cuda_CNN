@@ -1,8 +1,8 @@
 #include "../lib/fclayer.h"
 
 // Constructor
-FCLayer::FCLayer(cublasHandle_t cublasHandle, int inputSize, int outputSize, int batchSize, float learningRate)
-    : cublasHandle(cublasHandle), inputSize(inputSize), outputSize(outputSize), batchSize(batchSize), learningRate(learningRate) {
+FCLayer::FCLayer(cublasHandle_t cublasHandle, int inputSize, int outputSize, int batchSize, float learningRate, float weight_decay)
+    : cublasHandle(cublasHandle), inputSize(inputSize), outputSize(outputSize), batchSize(batchSize), learningRate(learningRate), weight_decay(weight_decay) {
     AllocateMemory();
     InitializeWeights();
 }
@@ -26,6 +26,10 @@ void FCLayer::AllocateMemory() {
 
     CHECK_CUDA(cudaMemset(ones, 1.0f, batchSize * sizeof(float)));
 
+    optimizer_weights = new Adam(inputSize * outputSize, batchSize, learningRate, weight_decay);
+    optimizer_bias = new Adam(outputSize, batchSize, learningRate);
+
+
 }
 
 // Free device memory
@@ -37,6 +41,9 @@ void FCLayer::FreeMemory() {
     CHECK_CUDA(cudaFree(deviceWeightGrad));
     CHECK_CUDA(cudaFree(deviceBiasGrad));
     CHECK_CUDA(cudaFree(ones));
+
+    delete optimizer_weights;
+    delete optimizer_bias;
 
 }
 
@@ -123,17 +130,8 @@ float* FCLayer::BackwardPass(const float* deviceOutputGrad) {
 
 void FCLayer::UpdateWeightsAndBiases() {
 
-    const float alpha = -learningRate;
-    const float beta = 1.0f;
-
-    CHECK_CUBLAS(cublasSaxpy(cublasHandle, 
-                            inputSize * outputSize, 
-                            &alpha,        // Learning rate
-                            deviceWeightGrad, 1,  // Scaled dW
-                            deviceWeight, 1));    // Existing weights
-
-    // Update biases
-    CHECK_CUBLAS(cublasSaxpy(cublasHandle, outputSize, &alpha, deviceBiasGrad, 1, deviceBias, 1)); 
+    optimizer_weights->update(deviceWeight, deviceWeightGrad);
+    optimizer_bias->update(deviceBias, deviceBiasGrad);
 
     cudaDeviceSynchronize();
 
@@ -147,8 +145,8 @@ void FCLayer::InitializeWeights() {
     int threadsPerBlock = 256; // Choose a value that's a power of 2, usually 256 or 512
     int blocksPerGrid = (weight_num_elements + threadsPerBlock - 1) / threadsPerBlock; // Calculate total blocks needed
 
-    // initializeUniformWeights<<<blocksPerGrid, threadsPerBlock>>>(deviceWeight, weight_num_elements, 1234ULL, -0.0f, 0.01f);
-    initializeXavierWeights<<<blocksPerGrid, threadsPerBlock>>>(deviceWeight, weight_num_elements, 1234ULL, inputSize);
+    initializeUniformWeights<<<blocksPerGrid, threadsPerBlock>>>(deviceWeight, weight_num_elements, 1234ULL, 0.0f, 0.01f);
+    // initializeXavierWeights<<<blocksPerGrid, threadsPerBlock>>>(deviceWeight, weight_num_elements, 1234ULL, inputSize);
 
     int bias_num_elements = outputSize;
     blocksPerGrid = (bias_num_elements + threadsPerBlock - 1) / threadsPerBlock; // Calculate total blocks needed

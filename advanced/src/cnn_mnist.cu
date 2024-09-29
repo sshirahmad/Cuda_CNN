@@ -12,7 +12,24 @@ std::tuple<std::vector<float*>, int, int, int, std::vector<std::string>> read_im
     int height = 0;
     int channels = 0;
 
+    // Sort the filenames and make sure the labels and images match. Important step. If not done properly the network will always overfit
+    // Vector to store directory entries
+    std::vector<fs::directory_entry> entries;
     for (const auto& entry : fs::directory_iterator(directory)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".png") {
+            entries.push_back(entry);
+        }
+    }
+
+    // Custom comparator to sort based on the numeric value of the filename stem (basename)
+    std::sort(entries.begin(), entries.end(), [](const fs::directory_entry& a, const fs::directory_entry& b) {
+        int num_a = std::stoi(a.path().stem().string());  // Convert basename to an integer
+        int num_b = std::stoi(b.path().stem().string());
+        return num_a < num_b;
+    });
+
+    // Collect all regular PNG files
+    for (const auto& entry : entries) {
 
         if (entry.is_regular_file() && entry.path().extension() == ".png") {
             // Read the image in grayscale or unchanged
@@ -82,12 +99,18 @@ struct Arguments {
     std::string load_directory;
     int dstWidth;
     int dstHeight;
-    int filterHeight;
-    int filterWidth;
-    int strideHeight;
-    int strideWidth;
-    int paddingHeight;
-    int paddingWidth;
+    int convfilterHeight;
+    int convfilterWidth;
+    int convstrideHeight;
+    int convstrideWidth;
+    int convpaddingHeight;
+    int convpaddingWidth;
+    int poolfilterHeight;
+    int poolfilterWidth;
+    int poolstrideHeight;
+    int poolstrideWidth;
+    int poolpaddingHeight;
+    int poolpaddingWidth;
     int numFilters;
     int hiddenDim;
     int numClass;
@@ -95,6 +118,8 @@ struct Arguments {
     float learningRate;
     bool debug;
     int epochs;
+    float weight_decay;
+    float dropoutProbability;
 };
 
 Arguments parseArguments(int argc, char* argv[]) {
@@ -102,22 +127,30 @@ Arguments parseArguments(int argc, char* argv[]) {
     Arguments args = {
         "../data/", // directory
         "./output/weights/", // Save directory
-        "./output/weights/weights_200.bin", // Load directory
+        "./output/weights/weights_best.bin", // Load directory
         28,                          // dstWidth
         28,                          // dstHeight
-        3,                            // filterHeight
-        3,                            // filterWidth
-        1,                            // strideHeight
-        1,                            // strideWidth
-        1,                            // paddingHeight
-        1,                            // paddingWidth
-        64,                           // numFilters
-        64,                           // hiddenDim
+        3,                            // convfilterHeight
+        3,                            // convfilterWidth
+        1,                            // convstrideHeight
+        1,                            // convstrideWidth
+        1,                            // convpaddingHeight
+        1,                            // convpaddingWidth
+        2,                            // poolfilterHeight
+        2,                            // poolfilterWidth
+        2,                            // poolstrideHeight
+        2,                            // poolstrideWidth
+        0,                            // poolpaddingHeight
+        0,                            // poolpaddingWidth
+        16,                           // numFilters
+        128,                           // hiddenDim
         10,                           // numClass
         128,                          // batchSize
         0.0001f,                     // learningRate
         false,                       // debug
-        200                         // epochs
+        200,                         // epochs
+        0.001f,                     // weight_decay
+        0.5                         // dropoutProbability                 
     };
 
     // Iterate through command-line arguments
@@ -155,52 +188,100 @@ Arguments parseArguments(int argc, char* argv[]) {
                 std::cerr << "Invalid height value provided. Using default value 240." << std::endl;
             }
         }
-        // Check for filter height
-        else if (arg == "-fh" && i + 1 < argc) {
+        // Check for convolution filter height
+        else if (arg == "-cfh" && i + 1 < argc) {
             try {
-                args.filterHeight = std::stoi(argv[++i]);
+                args.convfilterHeight = std::stoi(argv[++i]);
             } catch (const std::invalid_argument& e) {
-                std::cerr << "Invalid filter height value provided. Using default value 3." << std::endl;
+                std::cerr << "Invalid convolution filter height value provided. Using default value 3." << std::endl;
             }
         }
-        // Check for filter width
-        else if (arg == "-fw" && i + 1 < argc) {
+        // Check for convolution filter width
+        else if (arg == "-cfw" && i + 1 < argc) {
             try {
-                args.filterWidth = std::stoi(argv[++i]);
+                args.convfilterWidth = std::stoi(argv[++i]);
             } catch (const std::invalid_argument& e) {
-                std::cerr << "Invalid filter width value provided. Using default value 3." << std::endl;
+                std::cerr << "Invalid convolution filter width value provided. Using default value 3." << std::endl;
             }
         }
-        // Check for stride height
-        else if (arg == "-sh" && i + 1 < argc) {
+        // Check for convolution stride height
+        else if (arg == "-csh" && i + 1 < argc) {
             try {
-                args.strideHeight = std::stoi(argv[++i]);
+                args.convstrideHeight = std::stoi(argv[++i]);
             } catch (const std::invalid_argument& e) {
-                std::cerr << "Invalid stride height value provided. Using default value 1." << std::endl;
+                std::cerr << "Invalid convolution stride height value provided. Using default value 1." << std::endl;
             }
         }
-        // Check for stride width
-        else if (arg == "-sw" && i + 1 < argc) {
+        // Check for convolution stride width
+        else if (arg == "-csw" && i + 1 < argc) {
             try {
-                args.strideWidth = std::stoi(argv[++i]);
+                args.convstrideWidth = std::stoi(argv[++i]);
             } catch (const std::invalid_argument& e) {
-                std::cerr << "Invalid stride width value provided. Using default value 1." << std::endl;
+                std::cerr << "Invalid convolution stride width value provided. Using default value 1." << std::endl;
             }
         }
-        // Check for padding height
-        else if (arg == "-ph" && i + 1 < argc) {
+        // Check for convolution padding height
+        else if (arg == "-cph" && i + 1 < argc) {
             try {
-                args.paddingHeight = std::stoi(argv[++i]);
+                args.convpaddingHeight = std::stoi(argv[++i]);
             } catch (const std::invalid_argument& e) {
-                std::cerr << "Invalid padding height value provided. Using default value 1." << std::endl;
+                std::cerr << "Invalid convolution padding height value provided. Using default value 1." << std::endl;
             }
         }
-        // Check for padding width
-        else if (arg == "-pw" && i + 1 < argc) {
+        // Check for convolution padding width
+        else if (arg == "-cpw" && i + 1 < argc) {
             try {
-                args.paddingWidth = std::stoi(argv[++i]);
+                args.convpaddingWidth = std::stoi(argv[++i]);
             } catch (const std::invalid_argument& e) {
-                std::cerr << "Invalid padding width value provided. Using default value 1." << std::endl;
+                std::cerr << "Invalid convolution padding width value provided. Using default value 1." << std::endl;
+            }
+        }
+        // Check for pooling filter height
+        else if (arg == "-pfh" && i + 1 < argc) {
+            try {
+                args.poolfilterHeight = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid pooling filter height value provided. Using default value 2." << std::endl;
+            }
+        }
+        // Check for pooling filter width
+        else if (arg == "-pfw" && i + 1 < argc) {
+            try {
+                args.poolfilterWidth = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid pooling filter width value provided. Using default value 2." << std::endl;
+            }
+        }
+        // Check for pooling stride height
+        else if (arg == "-psh" && i + 1 < argc) {
+            try {
+                args.poolstrideHeight = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid pooling stride height value provided. Using default value 2." << std::endl;
+            }
+        }
+        // Check for pooling stride width
+        else if (arg == "-psw" && i + 1 < argc) {
+            try {
+                args.poolstrideWidth = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid pooling stride width value provided. Using default value 2." << std::endl;
+            }
+        }
+        // Check for pooling padding height
+        else if (arg == "-pph" && i + 1 < argc) {
+            try {
+                args.poolpaddingHeight = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid pooling padding height value provided. Using default value 0." << std::endl;
+            }
+        }
+        // Check for pooling padding width
+        else if (arg == "-ppw" && i + 1 < argc) {
+            try {
+                args.poolpaddingWidth = std::stoi(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid pooling padding width value provided. Using default value 0." << std::endl;
             }
         }
         // Check for number of filters
@@ -255,6 +336,22 @@ Arguments parseArguments(int argc, char* argv[]) {
                 std::cerr << "Invalid epochs value provided. Using default value 100." << std::endl;
             }
         }
+        // Check for weight decay
+        else if (arg == "-wd" && i + 1 < argc) {
+            try {
+                args.weight_decay = std::stof(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid weight decay value provided. Using default value 0.001." << std::endl;
+            }
+        }
+        // Check for dropout probability
+        else if (arg == "-dp" && i + 1 < argc) {
+            try {
+                args.dropoutProbability = std::stof(argv[++i]);
+            } catch (const std::invalid_argument& e) {
+                std::cerr << "Invalid dropout probability value provided. Using default value 0.5." << std::endl;
+            }
+        }
     }
 
     // Print all parameters
@@ -263,12 +360,18 @@ Arguments parseArguments(int argc, char* argv[]) {
     std::cout << "Load Path: " << args.load_directory << std::endl;
     std::cout << "Width: " << args.dstWidth << std::endl;
     std::cout << "Height: " << args.dstHeight << std::endl;
-    std::cout << "Filter Height: " << args.filterHeight << std::endl;
-    std::cout << "Filter Width: " << args.filterWidth << std::endl;
-    std::cout << "Stride Height: " << args.strideHeight << std::endl;
-    std::cout << "Stride Width: " << args.strideWidth << std::endl;
-    std::cout << "Padding Height: " << args.paddingHeight << std::endl;
-    std::cout << "Padding Width: " << args.paddingWidth << std::endl;
+    std::cout << "Convolution filter Height: " << args.convfilterHeight << std::endl;
+    std::cout << "Convolution filter Width: " << args.convfilterWidth << std::endl;
+    std::cout << "Convolution stride Height: " << args.convstrideHeight << std::endl;
+    std::cout << "Convolution stride Width: " << args.convstrideWidth << std::endl;
+    std::cout << "Convolution padding Height: " << args.convpaddingHeight << std::endl;
+    std::cout << "Convolution padding Width: " << args.convpaddingWidth << std::endl;
+    std::cout << "Pooling filter Height: " << args.poolfilterHeight << std::endl;
+    std::cout << "Pooling filter Width: " << args.poolfilterWidth << std::endl;
+    std::cout << "Pooling stride Height: " << args.poolstrideHeight << std::endl;
+    std::cout << "Pooling stride Width: " << args.poolstrideWidth << std::endl;
+    std::cout << "Pooling padding Height: " << args.poolpaddingHeight << std::endl;
+    std::cout << "Pooling padding Width: " << args.poolpaddingWidth << std::endl;
     std::cout << "Number of Filters: " << args.numFilters << std::endl;
     std::cout << "Hidden Dimension: " << args.hiddenDim << std::endl;
     std::cout << "Number of Classes: " << args.numClass << std::endl;
@@ -276,6 +379,8 @@ Arguments parseArguments(int argc, char* argv[]) {
     std::cout << "Learning Rate: " << args.learningRate << std::endl;
     std::cout << "Debug Mode: " << (args.debug ? "Enabled" : "Disabled") << std::endl;
     std::cout << "Epochs: " << args.epochs << std::endl;
+    std::cout << "Weight decay: " << args.weight_decay << std::endl;
+    std::cout << "Dropout probability: " << args.dropoutProbability << std::endl;
 
     return args;
 }
@@ -353,8 +458,73 @@ void printProgressBar(int current, int total, int barWidth = 50) {
 }
 
 
+float test(std::vector<float*> test_h_images, std::vector<int> test_labels, CNN& CNNModel, ImageAugmentation& Augmentor,
+            int numChannels, int dstHeight, int dstWidth, int batchSize){
 
-void train(std::vector<float*> train_h_images, std::vector<int> train_labels, std::vector<std::string> train_filenames, CNN& CNNModel, ImageAugmentation& Augmentor,
+    //////////////////////// TEST ////////////////////////
+
+
+    float accuracy = 0.0f;
+    int imageSize = numChannels * dstHeight * dstWidth;
+    size_t totalSamples = test_h_images.size();
+    size_t numBatches = (totalSamples + batchSize - 1) / batchSize;  // Calculate number of batches
+    std::vector<float*> batch_images_test;
+    std::vector<int> batch_labels_test;
+    std::vector<float> hostInput(batchSize * imageSize);  // Buffer for batch input
+    for (size_t batch = 0; batch < numBatches; ++batch) {
+
+        // Collect images and labels for the current batch
+        for (size_t i = 0; i < batchSize; ++i) {
+            size_t idx = batch * batchSize + i;
+            if (idx >= totalSamples) break;  // Avoid overflow for the last batch
+
+            const auto& img = test_h_images[idx];
+            const auto& label = test_labels[idx];
+
+            // Pre-process images
+            float* output = Augmentor.augment(img);
+            batch_images_test.push_back(output);
+            batch_labels_test.push_back(label);
+        }
+
+        // Ensure that the input buffer is properly prepared for the current batch
+        for (size_t i = 0; i < batch_images_test.size(); ++i) {
+            std::copy(batch_images_test[i], batch_images_test[i] + imageSize, hostInput.begin() + i * imageSize);
+        }
+
+        // Forward pass for the current batch
+        auto logits = CNNModel.ForwardPass(hostInput.data(), batch_labels_test.data(), false); 
+
+        // Compute accuracy for the current batch
+        auto deviceAccuracy = CNNModel.ComputeAccuracy();  
+
+        // Copy batch accuracy from device to host
+        float batchAccuracy = 0.0f;
+        cudaMemcpy(&batchAccuracy, deviceAccuracy, sizeof(float), cudaMemcpyDeviceToHost);
+
+        accuracy += batchAccuracy;
+
+        // Free batch-specific memory if necessary
+        for (auto& img : batch_images_test) {
+            delete[] img;  // Free memory for each augmented image
+        }
+        batch_images_test.clear();
+        batch_labels_test.clear();
+        hostInput.assign(batchSize * imageSize, 0.0f);  
+
+    }
+
+    // Normalize by the total number of samples to get overall accuracy
+    accuracy /= totalSamples;
+
+    std::cout << "Overall Accuracy: " << accuracy * 100.0f << "%" << std::endl;
+
+    return accuracy;
+
+}
+
+void train(std::vector<float*> train_h_images, std::vector<int> train_labels, std::vector<float*> test_h_images, std::vector<int> test_labels,
+             std::vector<std::string> train_filenames, CNN& CNNModel, ImageAugmentation& Augmentor,
              int numChannels, int dstHeight, int dstWidth, int epochs, int batchSize, int numClass, bool debug, std::string save_directory){
 
     //////////////////////// TRAINING ////////////////////////
@@ -366,6 +536,7 @@ void train(std::vector<float*> train_h_images, std::vector<int> train_labels, st
     std::vector<float> hostInput(batchSize * imageSize);
     std::vector<int> hostLabel;
     std::vector<std::string> batch_filenames;
+    float best_accuracy = 0.0f;
     for (size_t e = 0; e < epochs; ++e) {
 
         // Shuffle data at the start of each epoch
@@ -415,7 +586,7 @@ void train(std::vector<float*> train_h_images, std::vector<int> train_labels, st
                 }
 
                 // Pass the batch to the network
-                auto logits = CNNModel.ForwardPass(hostInput.data(), hostLabel.data()); 
+                auto logits = CNNModel.ForwardPass(hostInput.data(), hostLabel.data(), true); 
                 auto deviceLoss = CNNModel.ComputeLoss(); 
                 CNNModel.BackwardPass(); 
 
@@ -450,6 +621,10 @@ void train(std::vector<float*> train_h_images, std::vector<int> train_labels, st
                 }
 
                 // Clear the batch
+                // There will be memory leak if memories are not freed separately
+                for (auto& img : batch_images) {
+                    delete[] img;  // Free memory for each augmented image
+                }
                 batch_images.clear();
                 hostInput.assign(batchSize * imageSize, 0.0f);  // Maintain size of hostInput
                 hostLabel.clear();
@@ -457,7 +632,7 @@ void train(std::vector<float*> train_h_images, std::vector<int> train_labels, st
             }
         }
 
-        // save weights every ten epochs
+        // save weights and validate every ten epochs
         if (e % 10 == 9){
             // Create a directory
             std::filesystem::path dirPath(save_directory);
@@ -466,6 +641,16 @@ void train(std::vector<float*> train_h_images, std::vector<int> train_labels, st
                 std::cout << "Directory created: " << save_directory << std::endl;
             } else {
                 std::cout << "Directory already exists or failed to create: " << save_directory << std::endl;
+            }
+
+            // Validation
+            auto accuracy = test(test_h_images, test_labels, CNNModel, Augmentor, numChannels, dstHeight, dstWidth, batchSize);
+
+            if (best_accuracy < accuracy){
+                best_accuracy = accuracy;
+                std::string best_filename = save_directory + "weights_best.bin";
+                CNNModel.SaveModelWeights(best_filename);
+
             }
 
             std::string filename = save_directory + "weights_" + std::to_string(e + 1) + ".bin";
@@ -481,71 +666,6 @@ void train(std::vector<float*> train_h_images, std::vector<int> train_labels, st
     }
 
 }
-
-
-float test(std::vector<float*> test_h_images, std::vector<int> test_labels, CNN& CNNModel, ImageAugmentation& Augmentor,
-            int numChannels, int dstHeight, int dstWidth, int batchSize, std::string load_directory){
-
-    //////////////////////// TEST ////////////////////////
-    // Load model weights 
-    CNNModel.LoadModelWeights(load_directory);
-
-    float accuracy = 0.0f;
-    int imageSize = numChannels * dstHeight * dstWidth;
-    size_t totalSamples = test_h_images.size();
-    size_t numBatches = (totalSamples + batchSize - 1) / batchSize;  // Calculate number of batches
-    std::vector<float*> batch_images_test;
-    std::vector<int> batch_labels_test;
-    std::vector<float> hostInput(batchSize * imageSize);  // Buffer for batch input
-    for (size_t batch = 0; batch < numBatches; ++batch) {
-
-        // Collect images and labels for the current batch
-        for (size_t i = 0; i < batchSize; ++i) {
-            size_t idx = batch * batchSize + i;
-            if (idx >= totalSamples) break;  // Avoid overflow for the last batch
-
-            const auto& img = test_h_images[idx];
-            const auto& label = test_labels[idx];
-
-            // Pre-process images
-            float* output = Augmentor.augment(img);
-            batch_images_test.push_back(output);
-            batch_labels_test.push_back(label);
-        }
-
-        // Ensure that the input buffer is properly prepared for the current batch
-        for (size_t i = 0; i < batch_images_test.size(); ++i) {
-            std::copy(batch_images_test[i], batch_images_test[i] + imageSize, hostInput.begin() + i * imageSize);
-        }
-
-        // Forward pass for the current batch
-        auto logits = CNNModel.ForwardPass(hostInput.data(), batch_labels_test.data()); 
-
-        // Compute accuracy for the current batch
-        auto deviceAccuracy = CNNModel.ComputeAccuracy();  
-
-        // Copy batch accuracy from device to host
-        float batchAccuracy = 0.0f;
-        cudaMemcpy(&batchAccuracy, deviceAccuracy, sizeof(float), cudaMemcpyDeviceToHost);
-
-        accuracy += batchAccuracy;
-
-        // Free batch-specific memory if necessary (e.g., for augmented images)
-        batch_images_test.clear();
-        batch_labels_test.clear();
-        hostInput.assign(batchSize * imageSize, 0.0f);  
-
-    }
-
-    // Normalize by the total number of samples to get overall accuracy
-    accuracy /= totalSamples;
-
-    std::cout << "Overall Accuracy: " << accuracy * 100.0f << "%" << std::endl;
-
-    return accuracy;
-
-}
-
 
 int main(int argc, char* argv[]) {
 
@@ -573,18 +693,25 @@ int main(int argc, char* argv[]) {
 
     // Construct the network
     CNN CNNModel(cudnn, cublas, args.dstHeight, args.dstWidth,
-                args.filterHeight, args.filterWidth,
-                args.strideHeight, args.strideWidth,
-                args.paddingHeight, args.paddingWidth,
+                args.convfilterHeight, args.convfilterWidth,
+                args.convstrideHeight, args.convstrideWidth,
+                args.convpaddingHeight, args.convpaddingWidth,
+                args.poolfilterHeight, args.poolfilterWidth,
+                args.poolstrideHeight, args.poolstrideWidth,
+                args.poolpaddingHeight, args.poolpaddingWidth,
                 args.numFilters, numChannels,
                 args.hiddenDim, args.numClass,
-                args.batchSize, args.learningRate);
+                args.batchSize, args.learningRate,
+                args.weight_decay, args.dropoutProbability);
 
     // Train the model
-    train(train_h_images, train_labels, train_filenames, CNNModel, Augmentor, numChannels, args.dstHeight, args.dstWidth, args.epochs, args.batchSize, args.numClass, args.debug, args.save_directory);
+    train(train_h_images, train_labels, test_h_images, test_labels, train_filenames, CNNModel, Augmentor, numChannels, args.dstHeight, args.dstWidth, args.epochs, args.batchSize, args.numClass, args.debug, args.save_directory);
+
+    // Load model weights 
+    CNNModel.LoadModelWeights(args.load_directory);
 
     // Test the model
-    auto accuracy = test(test_h_images, test_labels, CNNModel, Augmentor, numChannels, args.dstHeight, args.dstWidth, args.batchSize, args.load_directory);
+    auto accuracy = test(test_h_images, test_labels, CNNModel, Augmentor, numChannels, args.dstHeight, args.dstWidth, args.batchSize);
 
     // Cleanup
     cudnnDestroy(cudnn);

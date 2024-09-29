@@ -10,12 +10,18 @@
 #include <kernel.h>
 #include <cublas_v2.h>
 #include <vector>
+#include <adam.h>
+
 
 // Error checking macro for cuDNN calls
 #define CHECK_CUDNN(call) \
-    if ((call) != CUDNN_STATUS_SUCCESS) { \
-        std::cerr << "cuDNN error at line " << __LINE__ << std::endl; \
-        exit(EXIT_FAILURE); \
+    {                       \
+        cudnnStatus_t status = call;                                        \
+        if ((call) != CUDNN_STATUS_SUCCESS) { \
+            std::cerr << "cuDNN error: " << status << " in "   \
+            << __FILE__ << " at line " << __LINE__ << std::endl; \
+            exit(EXIT_FAILURE); \
+        } \
     }
 
 
@@ -48,7 +54,8 @@ public:
                     int strideHeight, int strideWidth,
                     int paddingHeight, int paddingWidth,
                     int outputChannels, int inputChannels,
-                    int batchSize, float learningrate);
+                    int batchSize, float learningrate,
+                    float weight_decay);
 
     // Destructor
     ~ConvolutionLayer();
@@ -71,6 +78,11 @@ private:
     int convHeight, convWidth;
     int batchSize;
     float learningrate;
+    float weight_decay;
+
+    // Adam parameters
+    Adam* optimizer;
+
     cudnnHandle_t cudnn;
     cublasHandle_t cublas;
 

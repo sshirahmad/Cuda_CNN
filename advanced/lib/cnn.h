@@ -13,14 +13,20 @@
 #include <fclayer.h>
 #include <kernel.h>
 #include <loss.h>
+#include <adam.h>
+#include <dropout.h>
 
 // Error checking macro for cuDNN calls
 #define CHECK_CUDNN(call) \
-    if ((call) != CUDNN_STATUS_SUCCESS) { \
-        std::cerr << "cuDNN error at line " << __LINE__ << std::endl; \
-        exit(EXIT_FAILURE); \
+    {                       \
+        cudnnStatus_t status = call;                                        \
+        if ((call) != CUDNN_STATUS_SUCCESS) { \
+            std::cerr << "cuDNN error: " << status << " in "   \
+            << __FILE__ << " at line " << __LINE__ << std::endl; \
+            exit(EXIT_FAILURE); \
+        } \
     }
-
+    
 #define CHECK_CUDA(call)                                                       \
     {                                                                          \
         cudaError_t err = call;                                              \
@@ -36,18 +42,22 @@ public:
     // Constructor
     CNN(cudnnHandle_t cudnn, cublasHandle_t cublas,
             int inputHeight, int inputWidth,
-            int filterHeight, int filterWidth,
-            int strideHeight, int strideWidth,
-            int paddingHeight, int paddingWidth,
+            int convfilterHeight, int convfilterWidth,
+            int convstrideHeight, int convstrideWidth,
+            int convpaddingHeight, int convpaddingWidth,
+            int poolfilterHeight, int poolfilterWidth,
+            int poolstrideHeight, int poolstrideWidth,
+            int poolpaddingHeight, int poolpaddingWidth,
             int numFilter, int inputChannels,
             int hiddenDim, int numClass,
-            int batchSize, float learningrate);
+            int batchSize, float learningrate,
+            float weight_decay, float dropoutProbability);
 
     // Destructor
     ~CNN();
 
     // Forward pass
-    float* ForwardPass(const float* hostInput, const int* hostLabels);
+    float* ForwardPass(const float* hostInput, const int* hostLabels, bool training);
 
     float* ComputeLoss();
 
@@ -64,9 +74,12 @@ public:
 
 private:
     int inputHeight, inputWidth;
-    int filterHeight, filterWidth;
-    int strideHeight, strideWidth;
-    int paddingHeight, paddingWidth;
+    int convfilterHeight, convfilterWidth;
+    int convstrideHeight, convstrideWidth;
+    int convpaddingHeight, convpaddingWidth;
+    int poolfilterHeight, poolfilterWidth;
+    int poolstrideHeight, poolstrideWidth;
+    int poolpaddingHeight, poolpaddingWidth;
     int numFilter, inputChannels;
     int hiddenDim, numClass;
     int poolWidth, poolHeight;
@@ -76,21 +89,25 @@ private:
     cudnnHandle_t cudnn;
     cublasHandle_t cublas;
     float learningrate;
-    int flattenedSize;
+    float weight_decay;
+    float dropoutProbability;
 
     // CNN Layers
     ConvolutionLayer* C1 = nullptr;
     ActivationLayer* A1 = nullptr;
     PoolingLayer* P1 = nullptr;
+
     ConvolutionLayer* C2 = nullptr;
     ActivationLayer* A2 = nullptr;
     PoolingLayer* P2 = nullptr;
+
     ConvolutionLayer* C3 = nullptr;
+
+    FCLayer* F3 = nullptr;
     ActivationLayer* A3 = nullptr;
-    PoolingLayer* P3 = nullptr;
+    DropoutLayer* D3 = nullptr;
+
     FCLayer* F4 = nullptr;
-    ActivationLayer* A4 = nullptr;
-    FCLayer* F5 = nullptr;
 
     float* deviceInput;
     float* deviceLoss;
@@ -104,7 +121,7 @@ private:
     void AllocateMemory();
     void FreeMemory();
     void BuildModel();
-    std::tuple<int, int> CalculateDim(int inHeight, int inWidth);
+    std::tuple<int, int> CalculateDim(int inHeight, int inWidth, std::string type);
 
 };
 

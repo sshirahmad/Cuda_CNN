@@ -33,7 +33,7 @@ LDFLAGS = -L"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5/lib/x64" \
 
 
 # Define source files and target executable
-SRC = $(SRC_DIR)/cnn_mnist.cu $(SRC_DIR)/layers/convolution.cu $(SRC_DIR)/layers/pooling.cu $(SRC_DIR)/layers/activation.cu $(SRC_DIR)/layers/fclayer.cu $(SRC_DIR)/layers/kernel.cu $(SRC_DIR)/data_utils/augmentations.cu $(SRC_DIR)/models/cnn.cu $(SRC_DIR)/models/loss.cu 
+SRC = $(SRC_DIR)/cnn_mnist.cu $(SRC_DIR)/layers/convolution.cu $(SRC_DIR)/layers/dropout.cu $(SRC_DIR)/layers/pooling.cu $(SRC_DIR)/layers/activation.cu $(SRC_DIR)/layers/fclayer.cu $(SRC_DIR)/layers/kernel.cu $(SRC_DIR)/data_utils/augmentations.cu $(SRC_DIR)/models/cnn.cu $(SRC_DIR)/models/loss.cu $(SRC_DIR)/models/adam.cu 
 
 TARGET = $(BIN_DIR)/cnn_mnist.exe
 
@@ -47,7 +47,7 @@ $(TARGET): $(SRC)
 
 # Rule for running the application
 run: $(TARGET)
-	$(TARGET) -d "../data/" -w 28 -h 28 > ./output/output_log.txt
+	$(TARGET) -d "../data/" -ds "./output/weights/" -dl "./output/weights/weights_best.bin" -w 28 -h 28 -cfh 3 -cfw 3 -csh 1 -csw 1 -cph 1 -cpw 1 -pfh 2 -pfw 2 -psh 2 -psw 2 -pph 0 -ppw 0 -nf 32 -hd 128 -nc 10 -bs 64 -lr 0.001 -e 20 -wd 0.0 -dp 0.5 > ./output/output_log.txt 2>&1
 
 
 # Clean up

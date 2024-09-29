@@ -7,7 +7,8 @@ ConvolutionLayer::ConvolutionLayer(cudnnHandle_t cudnn, cublasHandle_t cublas,
                     int strideHeight, int strideWidth,
                     int paddingHeight, int paddingWidth,
                     int outputChannels, int inputChannels,
-                    int batchSize, float learningrate)
+                    int batchSize, float learningrate,
+                    float weight_decay)
                 :
     cudnn(cudnn), cublas(cublas),
     inputHeight(inputHeight), inputWidth(inputWidth),
@@ -15,7 +16,8 @@ ConvolutionLayer::ConvolutionLayer(cudnnHandle_t cudnn, cublasHandle_t cublas,
     strideHeight(strideHeight), strideWidth(strideWidth),
     paddingHeight(paddingHeight), paddingWidth(paddingWidth),
     outputChannels(outputChannels), inputChannels(inputChannels),
-    batchSize(batchSize), learningrate(learningrate) {
+    batchSize(batchSize), learningrate(learningrate),
+    weight_decay(weight_decay){
     
     // Initialize and set tensor and convolution descriptors
     CreateandSetDescs();
@@ -80,6 +82,12 @@ void ConvolutionLayer::CreateandSetDescs() {
     // Allocate memory for grad of convolution filter tensor
     CHECK_CUDA(cudaMalloc(&deviceFilterGrad, inputChannels * outputChannels * filterHeight * filterWidth * sizeof(float)));
 
+    /////////////////////////////////////////////////////////////////////////
+    ///////////////////////////// OPTIMIZERS ////////////////////////////////   
+    /////////////////////////////////////////////////////////////////////////
+
+    optimizer = new Adam(inputChannels * outputChannels * filterHeight * filterWidth, batchSize, learningrate, weight_decay);
+
 
 }
 
@@ -96,6 +104,8 @@ void ConvolutionLayer::FreeMemory() {
     CHECK_CUDA(cudaFree(deviceFilter));
     CHECK_CUDA(cudaFree(deviceInputGrad));
     CHECK_CUDA(cudaFree(deviceFilterGrad));
+
+    delete optimizer;
 
 }
 
@@ -122,23 +132,13 @@ float* ConvolutionLayer::BackwardPass(const float* deviceOutputGrad) {
 
 }
 
+
 void ConvolutionLayer::UpdateWeights() {
-    // Update weights (filters)
-    float alpha = -learningrate; 
-    float beta = 1.0f;            
 
-    // // Update filters using gradients
-    // CHECK_CUDNN(cudnnAddTensor(cudnn, &alpha, filterTensorDesc, deviceFilterGrad,
-    //                             &beta, filterTensorDesc, deviceFilter));
-
-
-    CHECK_CUBLAS(cublasSaxpy(cublas, 
-                inputChannels * outputChannels * filterHeight * filterWidth, 
-                &alpha,        // Learning rate
-                deviceFilterGrad, 1,  // Scaled dW
-                deviceFilter, 1));    // Existing weights
+    optimizer->update(deviceFilter, deviceFilterGrad);
 
     cudaDeviceSynchronize();
+
 }
 
 void ConvolutionLayer::LaunchConvolutionKernel() {
@@ -177,8 +177,8 @@ void ConvolutionLayer::SetFilters() {
     int threadsPerBlock = 256; // Choose a value that's a power of 2, usually 256 or 512
     int blocksPerGrid = (filter_num_elements + threadsPerBlock - 1) / threadsPerBlock; // Calculate total blocks needed
 
-    // initializeUniformWeights<<<blocksPerGrid, threadsPerBlock>>>(deviceFilter, filter_num_elements, 1234ULL, -0.0f, 0.01f);
-    initializeXavierWeights<<<blocksPerGrid, threadsPerBlock>>>(deviceFilter, filter_num_elements, 1234ULL, filterHeight * filterWidth * inputChannels);
+    initializeUniformWeights<<<blocksPerGrid, threadsPerBlock>>>(deviceFilter, filter_num_elements, 1234ULL, 0.0f, 0.01f);
+    // initializeXavierWeights<<<blocksPerGrid, threadsPerBlock>>>(deviceFilter, filter_num_elements, 1234ULL, filterHeight * filterWidth * inputChannels);
 
     // Ensure the kernel is executed correctly
     cudaError_t err = cudaGetLastError();
