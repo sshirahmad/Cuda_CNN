@@ -11,9 +11,13 @@
 
 // Error checking macro for cuDNN calls
 #define CHECK_CUDNN(call) \
-    if ((call) != CUDNN_STATUS_SUCCESS) { \
-        std::cerr << "cuDNN error at line " << __LINE__ << std::endl; \
-        exit(EXIT_FAILURE); \
+    {                       \
+        cudnnStatus_t status = call;                                        \
+        if ((call) != CUDNN_STATUS_SUCCESS) { \
+            std::cerr << "cuDNN error: " << status << " in "   \
+            << __FILE__ << " at line " << __LINE__ << std::endl; \
+            exit(EXIT_FAILURE); \
+        } \
     }
 
 

@@ -7,6 +7,7 @@
 #include <cuda_runtime.h>
 #include <kernel.h>
 #include <vector>
+#include <adam.h>
 
 #define CHECK_CUDA(call)                                                       \
     {                                                                          \
@@ -31,7 +32,7 @@
 
 class FCLayer {
 public:
-    FCLayer(cublasHandle_t cublasHandle, int inputSize, int outputSize, int batchSize, float learningRate);
+    FCLayer(cublasHandle_t cublasHandle, int inputSize, int outputSize, int batchSize, float learningRate, float weight_decay);
     ~FCLayer();
 
     float* ForwardPass(const float* deviceInput);
@@ -48,8 +49,12 @@ private:
     int outputSize;
     int batchSize;
     float learningRate;
+    float weight_decay;
 
     float* ones;
+
+    Adam* optimizer_weights;
+    Adam* optimizer_bias;
 
     // Device pointers
     const float* deviceInput;

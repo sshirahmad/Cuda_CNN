@@ -1,8 +1,8 @@
 #include "../lib/fclayer.h"
 
 // Constructor
-FCLayer::FCLayer(cublasHandle_t cublasHandle, int inputSize, int outputSize, int batchSize, float learningRate)
-    : cublasHandle(cublasHandle), inputSize(inputSize), outputSize(outputSize), batchSize(batchSize), learningRate(learningRate) {
+FCLayer::FCLayer(cublasHandle_t cublasHandle, int inputSize, int outputSize, int batchSize, float learningRate, float weight_decay)
+    : cublasHandle(cublasHandle), inputSize(inputSize), outputSize(outputSize), batchSize(batchSize), learningRate(learningRate), weight_decay(weight_decay) {
     AllocateMemory();
     InitializeWeights();
 }
@@ -26,6 +26,10 @@ void FCLayer::AllocateMemory() {
 
     CHECK_CUDA(cudaMemset(ones, 1.0f, batchSize * sizeof(float)));
 
+    optimizer_weights = new Adam(inputSize * outputSize, learningRate, weight_decay);
+    optimizer_bias = new Adam(outputSize, learningRate);
+
+
 }
 
 // Free device memory
@@ -37,6 +41,9 @@ void FCLayer::FreeMemory() {
     CHECK_CUDA(cudaFree(deviceWeightGrad));
     CHECK_CUDA(cudaFree(deviceBiasGrad));
     CHECK_CUDA(cudaFree(ones));
+
+    delete optimizer_weights;
+    delete optimizer_bias;
 
 }
 
@@ -121,19 +128,36 @@ float* FCLayer::BackwardPass(const float* deviceOutputGrad) {
     return deviceInputGrad; 
 }
 
+// void FCLayer::UpdateWeightsAndBiases() {
+
+//     const float alpha = -learningRate;
+//     const float beta = 1.0f;
+//     const float lambda = -weight_decay; 
+
+//     // Add weight decay
+//     CHECK_CUBLAS(cublasSaxpy(cublasHandle, 
+//                             inputSize * outputSize, 
+//                             &lambda,        // weight decay coefficient
+//                             deviceWeight, 1,  // Scaled W
+//                             deviceWeightGrad, 1));    // Existing weights    
+
+//     CHECK_CUBLAS(cublasSaxpy(cublasHandle, 
+//                             inputSize * outputSize, 
+//                             &alpha,        // Learning rate
+//                             deviceWeightGrad, 1,  // Scaled dW
+//                             deviceWeight, 1));    // Existing weights
+
+//     // Update biases
+//     CHECK_CUBLAS(cublasSaxpy(cublasHandle, outputSize, &alpha, deviceBiasGrad, 1, deviceBias, 1)); 
+
+//     cudaDeviceSynchronize();
+
+// }
+
 void FCLayer::UpdateWeightsAndBiases() {
 
-    const float alpha = -learningRate;
-    const float beta = 1.0f;
-
-    CHECK_CUBLAS(cublasSaxpy(cublasHandle, 
-                            inputSize * outputSize, 
-                            &alpha,        // Learning rate
-                            deviceWeightGrad, 1,  // Scaled dW
-                            deviceWeight, 1));    // Existing weights
-
-    // Update biases
-    CHECK_CUBLAS(cublasSaxpy(cublasHandle, outputSize, &alpha, deviceBiasGrad, 1, deviceBias, 1)); 
+    optimizer_weights->update(deviceWeight, deviceWeightGrad);
+    optimizer_bias->update(deviceBias, deviceBiasGrad);
 
     cudaDeviceSynchronize();
 

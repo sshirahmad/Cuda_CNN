@@ -166,11 +166,7 @@ void ImageAugmentation::convertHWCtoCHW(const float* srcImage, float* chwImage) 
     }
 }
 
-
-
-
-
-// Rotates the image by an angle (in degrees)
+// // Rotates the image by an angle (in degrees)
 // void ImageAugmentation::rotate(const unsigned char* d_inputImage, unsigned char* d_outputImage, double angle) {
 //     NppiSize srcSize = { width, height };
 //     NppiRect srcRect = { 0, 0, width, height };
@@ -182,7 +178,7 @@ void ImageAugmentation::convertHWCtoCHW(const float* srcImage, float* chwImage) 
 //     int nSrcStep = width * channels * sizeof(unsigned char);
 //     int nDstStep = width * channels * sizeof(unsigned char);
 
-//     NppStatus status = nppiRotate_8u_C3R(d_inputImage, nSrcStep, srcSize, srcRect,
+//     NppStatus status = nppiRotate_8u_C3R(d_inputImage, srcSize, nSrcStep, srcRect,
 //                                             d_outputImage, nDstStep, dstSize, dstRect,
 //                                             angle, anchor, NPPI_INTER_LINEAR);
 
