@@ -711,7 +711,7 @@ int main(int argc, char* argv[]) {
     CNNModel.LoadModelWeights(args.load_directory);
 
     // Test the model
-    auto accuracy = test(test_h_images, test_labels, CNNModel, Augmentor, numChannels, args.dstHeight, args.dstWidth, args.batchSize);
+    auto accuracy = test(test_h_images, test_labels, CNNModel, Augmentor, numChannels, args.dstHeight, args.dstWidth, args.batchSize, args.load_directory);
 
     // Cleanup
     cudnnDestroy(cudnn);

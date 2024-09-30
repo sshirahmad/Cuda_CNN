@@ -95,6 +95,7 @@ private:
     // CNN Layers
     ConvolutionLayer* C1 = nullptr;
     ActivationLayer* A1 = nullptr;
+    DropoutLayer* D1 = nullptr;
     PoolingLayer* P1 = nullptr;
 
     ConvolutionLayer* C2 = nullptr;
