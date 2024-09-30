@@ -45,9 +45,37 @@ $(TARGET): $(SRC)
 	mkdir -p $(BIN_DIR)
 	$(NVCC) $(CXXFLAGS) $(SRC) -o $(TARGET) $(LDFLAGS)
 
-# Rule for running the application
+# ARGUMENTS:
+#
+# Data Path: -d flag 
+# Save Path: -ds flag 
+# Load Path: -dl flag 
+# Image Resize Width: -w flag 
+# Image Resize Height: -h flag 
+# Convolution filter Height: -cfh flag 
+# Convolution filter Width: -cfw flag 
+# Convolution stride Height: -csh flag 
+# Convolution stride Width: -csw flag 
+# Convolution padding Height: -cph flag 
+# Convolution padding Width: -cpw flag 
+# Pooling filter Height: -pfh flag 
+# Pooling filter Width: -pfw flag 
+# Pooling stride Height: -psh flag ;
+# Pooling stride Width: -psw flag 
+# Pooling padding Height: -pph flag 
+# Pooling padding Width: -ppw flag 
+# Number of Filters: -nf flag 
+# Hidden Dimension: -hd flag 
+# Number of Classes: -nc flag 
+# Batch Size: -bs flag 
+# Learning Rate: -lr flag 
+# Debug Mode: -debug flag 
+# Epochs: -e flag 
+# Weight decay: -wd flag 
+# Dropout probability: -dp flag 
+#
 run: $(TARGET)
-	$(TARGET) -d "../data/" -ds "./output/weights/" -dl "./output/weights/weights_best.bin" -w 28 -h 28 -cfh 3 -cfw 3 -csh 1 -csw 1 -cph 1 -cpw 1 -pfh 2 -pfw 2 -psh 2 -psw 2 -pph 0 -ppw 0 -nf 32 -hd 128 -nc 10 -bs 64 -lr 0.001 -e 20 -wd 0.0 -dp 0.5 > ./output/output_log.txt 2>&1
+	$(TARGET) -d "./data/" -ds "./output/weights/" -dl "./output/weights/weights_best.bin" -w 28 -h 28 -cfh 3 -cfw 3 -csh 1 -csw 1 -cph 1 -cpw 1 -pfh 2 -pfw 2 -psh 2 -psw 2 -pph 0 -ppw 0 -nf 32 -hd 128 -nc 10 -bs 64 -lr 0.001 -e 20 -wd 0.0 -dp 0.5 > ./output/output_log.txt 2>&1
 
 
 # Clean up
