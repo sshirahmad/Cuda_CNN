@@ -1,23 +1,42 @@
-# Image Resize using NVIDIA NPP and CNN Operations with CUDA
+# MNIST Classification using cuDNN and cuBLAS 
 
 ## Overview
 
-This project implements basic operations of a Convolutional Neural Network (CNN), including convolution, max pooling, and ReLU activations, along with image resize. Currently, the code supports images with same height, width, and channels. The image resizing functionality utilizes the NVIDIA Performance Primitives (NPP) library. Key learning outcomes include building CUDA source files with `make`, understanding various flags, including external libraries, and utilizing shared memory for efficient convolution and pooling operations. Challenges included implementing image padding. Arbitrary filter size, padding, and stride may be used in the CNN layer which can be changed in the source file cnn_mnist.cu.
+This project implements several neural network layers including:
+
+- Convolutional layers: Implemented using cuDNN
+- Activation layers: Implemented using cuDNN
+- Pooling layers: Implemented using cuDNN
+- Fully-connetced layers: Implemented using cuBLAS
+- Dropout layers: Implemented using cuDNN
+
+All these layers are implemented in `./advanced/src/layers/` directory. These layers are used to construct a custom network defined in `./advanced/src/models/cnn.cu` to classify MNIST database. The weights and biases are updated using Adam optimizer implemented in `./advanced/src/models/adam.cu`. You can add other optimizers in this file and use them to update weights as well.
+
+The hyperparamters of this network such as filter height, number of filters, strides, padding, and etc. can be specified in the make file `Makefile` using the corresponding arguments (Refer to the make file for arguments description and how to use them.).
+
+An augmentor class is also implemented using NVIDIA Performance Primitives (NPP) library functions to augment images if necessary. Currently, resize, normalization, and conversion from HWC to CHW format is implemented.
+
+The code is commented and many classes can be used as a template to implement other features, such as different pooling, activation functions, adding/removing layers, and etc.
+
+The `./simple/` folder also contains the forward pass of convolution, pooling, and activation layers using raw CUDA functions. 
+
+After running experiments, the log files and weights can be found in `./output/` folder.
 
 ## Code Organization
 
-- **`bin/`**: Contains binary/executable files that are built automatically or manually.
-- **`data/`**: Holds example images from the MNIST database.
-- **`lib/`**: Includes libraries not installed via the operating system's package manager.
-- **`src/`**: Contains the source files for the project.
-- **`Makefile`**: Defines build and run commands for the project. Modify arguments like resized image size within this file.
+- **`./bin/`**: Contains binary/executable files that are built automatically or manually.
+- **`./data/`**: Holds the MNIST database.
+- **`./advanced/lib/`**: Includes libraries header files.
+- **`./advanced/src/`**: Contains the source files for the project.
+- **`Makefile`**: Defines build and run commands for the project.
 
 ## Key Concepts
 
 - Performance Strategies
 - Image Processing
-- NPP Library
 - Convolutional Neural Networks
+- NPP, cuDNN and cuBLAS libraries
+- CUDA 
 
 ## Supported OSes
 
@@ -51,15 +70,15 @@ After building the project, you can run the program using the following command:
 make run
 ```
 
-This command will execute the compiled binary, resizing the input image and apply CNN operations to the resized image, and save the result as output.png in the output/ directory.
+This command will execute the compiled binary.
 
-If you wish to run the binary directly with custom input/output files, you can use:
+If you wish to run the binary directly with custom flags, you can use:
 
 ```bash
-./bin/cnn_mnist.exe -d data/ -i 0 -w 500 -h 500
+./bin/cnn_mnist.exe -d ./data/ 
 ```
 
-Use `-w` and `-h` flags to determine the width and height of the resized image. Use `-i` flag to determine the index of an image to process among images in directory specified by flag `-d`.
+You can change flags inside `Makefile` as well.
 
 ## Cleaning Up
 To clean up the compiled binaries and other generated files, run:
@@ -69,4 +88,4 @@ To clean up the compiled binaries and other generated files, run:
 make clean
 ```
 
-This will remove all files in the bin/ directory.
+This will remove all files in the `./bin/` and `./output/` directory.

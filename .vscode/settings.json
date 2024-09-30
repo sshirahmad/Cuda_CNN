@@ -65,6 +65,16 @@
         "list": "cpp",
         "xfacet": "cpp",
         "xlocale": "cpp",
-        "xlocinfo": "cpp"
+        "xlocinfo": "cpp",
+        "array": "cpp",
+        "codecvt": "cpp",
+        "complex": "cpp",
+        "map": "cpp",
+        "mutex": "cpp",
+        "set": "cpp",
+        "stop_token": "cpp",
+        "thread": "cpp",
+        "xtree": "cpp",
+        "numeric": "cpp"
     }
 }
